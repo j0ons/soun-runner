@@ -565,6 +565,20 @@ def download_variant_pdf(job_id: str, variant: str):
                      download_name=f"SounRunner-{_safe_name(job['client_name'])}-{variant}.pdf")
 
 
+@bp.get("/download/<variant>/html/<job_id>")
+def download_variant_html(job_id: str, variant: str):
+    job = _jobs.get(job_id)
+    if not job:
+        return "Job not found.", 404
+    if variant not in ("client", "engineer"):
+        return "Unknown report.", 404
+    html_path = job.get(f"report_html_{variant}")
+    if not html_path or not Path(html_path).exists():
+        return "HTML not available.", 404
+    return send_file(html_path, as_attachment=True,
+                     download_name=f"SounRunner-{_safe_name(job['client_name'])}-{variant}.html")
+
+
 @bp.get("/download/pdf/<job_id>")
 def download_pdf(job_id: str):
     job = _jobs.get(job_id)

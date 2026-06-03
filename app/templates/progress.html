@@ -87,8 +87,10 @@ body::after { content:''; position:fixed; inset:0; pointer-events:none;
 @keyframes bl { 50% { opacity: 0; } }
 
 /* actions */
-.actions { display: flex; gap: 0.6rem; margin-top: 1.25rem; flex-wrap: wrap; }
-.btn { padding: 0.65rem 1.1rem; border-radius: 5px; font-family: var(--mono); font-size: 0.76rem; font-weight: 700;
+.actions { display: flex; gap: 1.25rem; margin-top: 1.25rem; flex-wrap: wrap; align-items: center; }
+.report-group { display: flex; gap: 0.4rem; align-items: center; padding: 0.4rem 0.6rem; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,0.015); }
+.rg-label { font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); margin-right: 0.35rem; }
+.btn { padding: 0.5rem 0.85rem; border-radius: 5px; font-family: var(--mono); font-size: 0.74rem; font-weight: 700;
   letter-spacing: 0.06em; cursor: pointer; border: 1px solid var(--line2); text-decoration: none;
   display: inline-flex; align-items: center; gap: 0.4rem; transition: all 0.15s; color: var(--dim); background: var(--panel); }
 .btn:hover { color: var(--txt); border-color: #2a3e52; }
@@ -149,17 +151,33 @@ body::after { content:''; position:fixed; inset:0; pointer-events:none;
 
   <div class="actions" id="actions" style="display:none;">
     {% if job.mode == 'free' %}
-    <a class="btn btn-go" href="/report/{{ job_id }}/client" target="_blank">▶ CLIENT REPORT</a>
-    <a class="btn btn-go" href="/report/{{ job_id }}/engineer" target="_blank">▶ ENGINEER REPORT</a>
-    <a class="btn" href="/download/client/pdf/{{ job_id }}">↓ CLIENT PDF</a>
-    <a class="btn" href="/download/engineer/pdf/{{ job_id }}">↓ ENGINEER PDF</a>
-    <a class="btn" href="/free">+ NEW SCAN</a>
+    <div class="report-group">
+      <span class="rg-label">Client Report</span>
+      <a class="btn btn-go" href="/report/{{ job_id }}/client" target="_blank">View</a>
+      <a class="btn" href="/download/client/pdf/{{ job_id }}">PDF</a>
+      <a class="btn" href="/download/client/html/{{ job_id }}">HTML</a>
+    </div>
+    <div class="report-group">
+      <span class="rg-label">Engineer Report</span>
+      <a class="btn btn-go" href="/report/{{ job_id }}/engineer" target="_blank">View</a>
+      <a class="btn" href="/download/engineer/pdf/{{ job_id }}">PDF</a>
+      <a class="btn" href="/download/engineer/html/{{ job_id }}">HTML</a>
+    </div>
+    <div class="report-group">
+      <a class="btn" href="/free">+ New Scan</a>
+    </div>
     {% else %}
-    <a class="btn btn-go" href="/report/{{ job_id }}" target="_blank">OPEN REPORT</a>
-    <a class="btn" href="/workspace/{{ job_id }}">ENGINEER WORKSPACE</a>
-    <a class="btn" href="/download/pdf/{{ job_id }}">PDF</a>
-    <a class="btn" href="/checklist/{{ job_id }}">CHECKLIST</a>
-    <a class="btn" href="/advanced">NEW SCAN</a>
+    <div class="report-group">
+      <span class="rg-label">Assessment Report</span>
+      <a class="btn btn-go" href="/report/{{ job_id }}" target="_blank">View</a>
+      <a class="btn" href="/download/pdf/{{ job_id }}">PDF</a>
+      <a class="btn" href="/download/html/{{ job_id }}">HTML</a>
+    </div>
+    <div class="report-group">
+      <a class="btn" href="/workspace/{{ job_id }}">Workspace</a>
+      <a class="btn" href="/checklist/{{ job_id }}">Checklist</a>
+      <a class="btn" href="/advanced">+ New Scan</a>
+    </div>
     {% endif %}
   </div>
 </div>
