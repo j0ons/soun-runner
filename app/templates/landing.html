@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOUN RUNNER</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:#05080d; --panel:#0a0f17; --panel2:#0c121c; --line:#16202e; --line2:#1d2c3e;
+  --txt:#c8d4e0; --dim:#4a5b6e; --grn:#2dd47f; --grn-d:#0d7a45; --cyan:#2bb8e8;
+  --red:#ff4d4d; --mono:'SF Mono','Cascadia Code','Fira Code','JetBrains Mono','Consolas',monospace;
+}
+body {
+  font-family: var(--mono); background: var(--bg); color: var(--txt);
+  min-height: 100vh; display: flex; flex-direction: column; font-size: 13px; line-height: 1.5;
+  background-image: linear-gradient(rgba(45,212,127,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(45,212,127,0.015) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+body::after { content:''; position:fixed; inset:0; pointer-events:none;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,0.12) 0, rgba(0,0,0,0.12) 1px, transparent 1px, transparent 3px);
+  opacity:0.3; z-index:9999; mix-blend-mode:multiply; }
+
+.topbar { border-bottom: 1px solid var(--line); background: linear-gradient(180deg,#070b11,var(--bg));
+  padding: 0 1.5rem; height: 52px; display: flex; align-items: center; gap: 0.7rem; }
+.brand-glyph { width:30px; height:30px; border:1px solid var(--grn-d); border-radius:4px; display:flex; align-items:center; justify-content:center; color:var(--grn); font-size:15px; box-shadow:0 0 12px rgba(45,212,127,0.2); }
+.brand-txt { font-weight:700; letter-spacing:0.06em; color:#e8f0f7; font-size:0.92rem; } .brand-txt .accent { color:var(--grn); }
+.brand-sub { font-size:0.62rem; color:var(--dim); letter-spacing:0.12em; display:block; margin-top:-1px; }
+
+main { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:3rem 1.5rem; }
+
+.heading { text-align:center; margin-bottom:2.5rem; }
+.heading .cmd { color:var(--dim); font-size:0.78rem; margin-bottom:0.5rem; }
+.heading .cmd .p { color:var(--grn); } .heading .cmd .c { color:var(--cyan); }
+.heading h1 { font-size:1.4rem; font-weight:700; color:#e8f0f7; letter-spacing:0.03em; }
+.heading h1 .blink { color:var(--grn); animation:blink 1.1s step-end infinite; }
+@keyframes blink { 50% { opacity:0; } }
+.heading p { color:var(--dim); font-size:0.78rem; margin-top:0.4rem; }
+
+.choices { display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; max-width:760px; width:100%; }
+@media (max-width:680px){ .choices { grid-template-columns:1fr; } }
+
+.choice {
+  border:1px solid var(--line2); border-radius:8px; background:var(--panel); padding:1.5rem;
+  display:flex; flex-direction:column; gap:0.75rem; transition:border-color 0.15s, box-shadow 0.15s;
+}
+.choice:hover { border-color:#2a3e52; }
+.choice.adv:hover { border-color:var(--grn-d); box-shadow:0 0 18px rgba(45,212,127,0.08); }
+.choice-tag { font-size:0.62rem; letter-spacing:0.12em; text-transform:uppercase; padding:0.2rem 0.55rem; border-radius:4px; align-self:flex-start; }
+.choice-tag.free { background:#0a2a44; color:#5cc8f0; }
+.choice-tag.adv { background:#08321d; color:var(--grn); }
+.choice h2 { font-size:1.05rem; color:#e8f0f7; font-weight:700; }
+.choice-desc { font-size:0.76rem; color:var(--dim); line-height:1.5; flex:1; }
+.choice-list { list-style:none; font-size:0.72rem; color:var(--dim); display:flex; flex-direction:column; gap:0.3rem; }
+.choice-list li::before { content:'▸ '; color:var(--grn); }
+.choice-list li.no::before { content:'✗ '; color:#3a4a5a; }
+.choice-list li.no { color:#3a4a5a; }
+
+.go-btn {
+  display:block; text-align:center; text-decoration:none; padding:0.7rem; border-radius:6px;
+  font-family:var(--mono); font-weight:700; font-size:0.82rem; letter-spacing:0.08em; cursor:pointer; border:1px solid;
+  transition:all 0.15s; margin-top:0.5rem;
+}
+.go-free { background:#08151f; border-color:#143040; color:#5cc8f0; }
+.go-free:hover { border-color:var(--cyan); }
+.go-adv { background:linear-gradient(180deg,#0e9e57,#0a7a43); border-color:#14b566; color:#021109; box-shadow:0 0 14px rgba(45,212,127,0.2); }
+.go-adv:hover { box-shadow:0 0 22px rgba(45,212,127,0.35); }
+
+/* password */
+.pw-row { display:flex; gap:0.5rem; }
+.pw-in {
+  flex:1; background:#060a10; border:1px solid var(--line2); border-radius:5px; padding:0.6rem 0.75rem;
+  color:var(--grn); font-family:var(--mono); font-size:0.82rem; outline:none;
+}
+.pw-in:focus { border-color:var(--grn-d); box-shadow:0 0 0 1px var(--grn-d); }
+.pw-go { background:linear-gradient(180deg,#0e9e57,#0a7a43); border:1px solid #14b566; border-radius:5px; color:#021109; font-family:var(--mono); font-weight:700; padding:0 1rem; cursor:pointer; }
+.pw-err { color:var(--red); font-size:0.72rem; margin-top:0.4rem; }
+.unlocked-note { font-size:0.7rem; color:var(--grn); margin-top:0.3rem; }
+
+footer { border-top:1px solid var(--line); padding:1.25rem; text-align:center; font-size:0.66rem; color:#2a3949; letter-spacing:0.06em; }
+footer a { color:var(--dim); text-decoration:none; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand-glyph"><img src="{{ logo_uri }}" alt="Soun" style="width:26px;height:26px;object-fit:contain;"></div>
+  <div>
+    <div class="brand-txt">SOUN<span class="accent">RUNNER</span></div>
+    <span class="brand-sub">SOUN AL HOSN · PRIVATE ASSESSMENT ENGINE</span>
+  </div>
+</div>
+
+<main>
+  <div class="heading">
+    <div class="cmd"><span class="p">soun@alhosn</span>:<span class="c">~</span>$ ./sounrunner</div>
+    <h1>Select Assessment Mode<span class="blink">_</span></h1>
+    <p>Internal tool — Soun Al Hosn Cybersecurity only.</p>
+  </div>
+
+  <div class="choices">
+
+    <!-- FREE -->
+    <div class="choice">
+      <span class="choice-tag free">Free Scan</span>
+      <h2>Quick Network Look</h2>
+      <div class="choice-desc">A fast, lightweight scan — discovers live hosts and flags exposed dangerous services. Good for a first look or a free lead-in.</div>
+      <ul class="choice-list">
+        <li>Live host discovery</li>
+        <li>Open dangerous ports</li>
+        <li>Basic per-service risk</li>
+        <li class="no">No deep probing / agent</li>
+        <li class="no">No compliance / topology</li>
+      </ul>
+      <a class="go-btn go-free" href="/free">▶ START FREE SCAN</a>
+    </div>
+
+    <!-- ADVANCED -->
+    <div class="choice adv">
+      <span class="choice-tag adv">Advanced — Restricted</span>
+      <h2>Full Assessment Engine</h2>
+      <div class="choice-desc">The complete paid-grade assessment — deep probing, validation agent, compliance mapping, remediation runbook. Password required.</div>
+      {% if unlocked %}
+      <div class="unlocked-note">✓ Already unlocked this session</div>
+      <a class="go-btn go-adv" href="/advanced">▶ OPEN CONSOLE</a>
+      {% else %}
+      <form method="POST" action="/unlock">
+        <div class="pw-row">
+          <input class="pw-in" type="password" name="password" placeholder="password" autocomplete="off" autofocus>
+          <button class="pw-go" type="submit">UNLOCK</button>
+        </div>
+        {% if error %}<div class="pw-err">✗ {{ error }}</div>{% endif %}
+      </form>
+      {% endif %}
+    </div>
+
+  </div>
+</main>
+
+<footer>
+  SOUN AL HOSN CYBERSECURITY LLC · DUBAI, UAE · <a href="https://sounalhosn.ae">sounalhosn.ae</a> · AUTHORIZED USE ONLY
+</footer>
+</body>
+</html>

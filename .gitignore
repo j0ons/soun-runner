@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Generated reports (client data — never commit)
+reports/*.html
+reports/*.pdf
+!reports/.gitkeep
+
+# Scan artifacts / temp
+*.xml
+sounrunner_*.xml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

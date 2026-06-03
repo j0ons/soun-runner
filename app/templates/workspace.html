@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workspace — {{ job.client_name }}</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:#0b0d10; --panel:#13161b; --panel2:#171b21; --line:#242a32; --line2:#2e353f;
+  --txt:#d4d9df; --dim:#7a828c; --acc:#3a7bd5; --acc2:#2563a8;
+  --grn:#46b572; --red:#e05555; --amber:#d99a2b;
+  --mono:'SF Mono','JetBrains Mono','Cascadia Code','Consolas',monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;
+}
+body { font-family:var(--sans); background:var(--bg); color:var(--txt); min-height:100vh; font-size:13.5px; line-height:1.5; }
+.bar { border-bottom:1px solid var(--line); background:var(--panel); padding:0 1.5rem; height:50px; display:flex; align-items:center; gap:0.75rem; }
+.bar img { width:24px; height:24px; object-fit:contain; }
+.bar .t { font-weight:700; font-size:0.9rem; color:#eef1f5; }
+.bar .t span { color:var(--dim); font-weight:400; font-size:0.8rem; margin-left:0.5rem; }
+.bar .right { margin-left:auto; display:flex; gap:0.75rem; align-items:center; }
+.bar a { color:var(--dim); text-decoration:none; font-size:0.8rem; }
+.bar a:hover { color:var(--txt); }
+
+.layout { display:grid; grid-template-columns:280px 1fr 320px; height:calc(100vh - 50px); }
+@media (max-width:1100px){ .layout { grid-template-columns:240px 1fr; } .triage-col { display:none; } }
+
+.col { overflow-y:auto; }
+.col-hosts { border-right:1px solid var(--line); background:var(--panel); }
+.col-main { background:var(--bg); }
+.triage-col { border-left:1px solid var(--line); background:var(--panel); }
+.col-hdr { padding:0.7rem 1rem; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--dim); border-bottom:1px solid var(--line); position:sticky; top:0; background:inherit; }
+
+/* host list */
+.host { padding:0.7rem 1rem; border-bottom:1px solid var(--line); cursor:pointer; transition:background 0.12s; }
+.host:hover { background:var(--panel2); }
+.host.active { background:#172230; border-left:2px solid var(--acc); padding-left:calc(1rem - 2px); }
+.host-ip { font-family:var(--mono); font-size:0.84rem; color:#eef1f5; font-weight:600; }
+.host-dev { font-size:0.72rem; color:var(--dim); margin-top:0.1rem; }
+.host-tags { margin-top:0.35rem; display:flex; gap:0.3rem; flex-wrap:wrap; }
+.tag { font-size:0.6rem; padding:0.1rem 0.4rem; border-radius:3px; letter-spacing:0.03em; }
+.tag.critical { background:#2a1212; color:#e87171; border:1px solid #5a2020; }
+.tag.high { background:#2a1c10; color:#e0934a; border:1px solid #5a3a1a; }
+.tag.medium { background:#2a2410; color:#d9bc4a; border:1px solid #5a4f1a; }
+.tag.gw { background:#102a1c; color:#5ab584; border:1px solid #1f5a3c; }
+
+/* main / actions */
+.main-pad { padding:1.25rem 1.5rem; }
+.host-head { display:flex; align-items:baseline; gap:0.75rem; margin-bottom:0.25rem; }
+.host-head .ip { font-family:var(--mono); font-size:1.3rem; font-weight:700; color:#eef1f5; }
+.host-head .dev { color:var(--dim); font-size:0.85rem; }
+.host-sub { color:var(--dim); font-size:0.8rem; margin-bottom:1.1rem; font-family:var(--mono); }
+.actions { display:flex; flex-wrap:wrap; gap:0.5rem; margin-bottom:1.25rem; }
+.act-btn { background:var(--panel2); border:1px solid var(--line2); border-radius:5px; padding:0.45rem 0.85rem; color:var(--txt); font-family:var(--sans); font-size:0.8rem; cursor:pointer; transition:all 0.12s; }
+.act-btn:hover { border-color:var(--acc); color:#fff; }
+.act-btn:disabled { opacity:0.5; cursor:wait; }
+
+.out-wrap { border:1px solid var(--line); border-radius:6px; background:#0c0e11; overflow:hidden; }
+.out-hdr { padding:0.5rem 0.85rem; background:var(--panel2); border-bottom:1px solid var(--line); font-size:0.72rem; color:var(--dim); display:flex; align-items:center; gap:0.5rem; }
+.out-hdr .live { width:7px; height:7px; border-radius:50%; background:var(--dim); }
+.out-hdr .live.on { background:var(--amber); animation:pulse 1s infinite; }
+.out-hdr .live.done { background:var(--grn); }
+@keyframes pulse { 50% { opacity:0.3; } }
+.out { padding:0.85rem 1rem; font-family:var(--mono); font-size:0.76rem; line-height:1.6; white-space:pre-wrap; word-break:break-word; color:#b8c0c9; max-height:calc(100vh - 320px); overflow-y:auto; min-height:120px; }
+.out .empty { color:var(--dim); }
+
+.placeholder { color:var(--dim); padding:3rem 1.5rem; text-align:center; font-size:0.9rem; }
+
+/* triage */
+.triage-item { padding:0.7rem 1rem; border-bottom:1px solid var(--line); }
+.triage-title { font-size:0.78rem; color:var(--txt); margin-bottom:0.4rem; line-height:1.35; }
+.triage-meta { font-size:0.68rem; color:var(--dim); font-family:var(--mono); margin-bottom:0.45rem; }
+.triage-btns { display:flex; gap:0.25rem; flex-wrap:wrap; }
+.tb { font-size:0.64rem; padding:0.2rem 0.45rem; border-radius:3px; border:1px solid var(--line2); background:var(--panel2); color:var(--dim); cursor:pointer; }
+.tb:hover { color:var(--txt); }
+.tb.on.confirmed { background:#102a1c; color:#5ab584; border-color:#1f5a3c; }
+.tb.on.false_positive { background:#2a2410; color:#d9bc4a; border-color:#5a4f1a; }
+.tb.on.accepted_risk { background:#1a2230; color:#6a9bd5; border-color:#2a4a6a; }
+.tb.on.fixed { background:#162a1a; color:#5ab584; border-color:#2a5a3a; }
+
+.manual-form { padding:0.85rem 1rem; border-top:1px solid var(--line); }
+.manual-form input, .manual-form select, .manual-form textarea { width:100%; background:#0c0e11; border:1px solid var(--line2); border-radius:4px; padding:0.4rem 0.55rem; color:var(--txt); font-family:var(--sans); font-size:0.76rem; margin-bottom:0.4rem; outline:none; }
+.manual-form textarea { resize:vertical; min-height:42px; }
+.manual-form button { width:100%; background:var(--acc2); border:1px solid var(--acc); border-radius:4px; padding:0.45rem; color:#fff; font-size:0.76rem; cursor:pointer; }
+.mf-lbl { font-size:0.64rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--dim); margin-bottom:0.35rem; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <img src="{{ logo_uri }}" alt="Soun">
+  <div class="t">Engineer Workspace <span>{{ job.client_name }} · {{ job.target }}</span></div>
+  <div class="right">
+    <a href="/report/{{ job_id }}" target="_blank">view report</a>
+    <a href="/checklist/{{ job_id }}">field checklist</a>
+    <a href="/advanced">console</a>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- Hosts -->
+  <div class="col col-hosts">
+    <div class="col-hdr">Hosts ({{ hosts|length }})</div>
+    {% for h in hosts %}
+    <div class="host" data-ip="{{ h.ip }}" data-dev="{{ h.device }}" onclick="selectHost(this)">
+      <div class="host-ip">{{ h.ip }}</div>
+      <div class="host-dev">{{ h.device }}</div>
+      <div class="host-tags">
+        {% if h.is_gateway %}<span class="tag gw">GATEWAY</span>{% endif %}
+        {% if h.risk in ('critical','high','medium') %}<span class="tag {{ h.risk }}">{{ h.risk|upper }}</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Action panel -->
+  <div class="col col-main">
+    <div id="mainPlaceholder" class="placeholder">Select a host to run live actions.</div>
+    <div id="mainPanel" class="main-pad" style="display:none;">
+      <div class="host-head"><span class="ip" id="selIp">—</span><span class="dev" id="selDev"></span></div>
+      <div class="host-sub" id="selPorts"></div>
+      <div class="actions">
+        {% for key, meta in actions.items() %}
+        <button class="act-btn" data-action="{{ key }}" title="{{ meta[1] }}" onclick="runAction('{{ key }}')">{{ meta[0] }}</button>
+        {% endfor %}
+      </div>
+      <div class="out-wrap">
+        <div class="out-hdr"><span class="live" id="liveDot"></span><span id="outTitle">output</span></div>
+        <div class="out" id="out"><span class="empty">Run an action above — results appear here.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Triage -->
+  <div class="col triage-col">
+    <div class="col-hdr">Finding Triage ({{ findings|length }})</div>
+    {% for f in findings %}
+    <div class="triage-item" data-key="{{ f.key }}">
+      <div class="triage-title">{{ f.title }}</div>
+      <div class="triage-meta">{{ f.host }}{% if f.port %}:{{ f.port }}{% endif %} · {{ f.risk|upper }}</div>
+      <div class="triage-btns">
+        <span class="tb confirmed {{ 'on' if f.state=='confirmed' }}" onclick="triage(this,'{{ f.key|e }}','confirmed')">Confirm</span>
+        <span class="tb false_positive {{ 'on' if f.state=='false_positive' }}" onclick="triage(this,'{{ f.key|e }}','false_positive')">False+</span>
+        <span class="tb accepted_risk {{ 'on' if f.state=='accepted_risk' }}" onclick="triage(this,'{{ f.key|e }}','accepted_risk')">Accepted</span>
+        <span class="tb fixed {{ 'on' if f.state=='fixed' }}" onclick="triage(this,'{{ f.key|e }}','fixed')">Fixed</span>
+      </div>
+    </div>
+    {% endfor %}
+
+    <div class="manual-form">
+      <div class="mf-lbl">Add manual finding</div>
+      <input id="mfTitle" placeholder="Title (e.g. Weak password policy)">
+      <input id="mfHost" placeholder="Host / area">
+      <select id="mfRisk">
+        <option value="critical">Critical</option>
+        <option value="high">High</option>
+        <option value="medium" selected>Medium</option>
+        <option value="low">Low</option>
+      </select>
+      <textarea id="mfDetail" placeholder="Detail / observation"></textarea>
+      <button onclick="addManual()">Add to report</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const jobId = "{{ job_id }}";
+let curIp = null, curDev = null, curPorts = null;
+
+function selectHost(el) {
+  document.querySelectorAll('.host').forEach(h => h.classList.remove('active'));
+  el.classList.add('active');
+  curIp = el.dataset.ip; curDev = el.dataset.dev;
+  document.getElementById('mainPlaceholder').style.display = 'none';
+  document.getElementById('mainPanel').style.display = 'block';
+  document.getElementById('selIp').textContent = curIp;
+  document.getElementById('selDev').textContent = curDev;
+  document.getElementById('selPorts').textContent = 'Ready — choose an action.';
+  document.getElementById('out').innerHTML = '<span class="empty">Run an action above — results appear here.</span>';
+  document.getElementById('liveDot').className = 'live';
+  document.getElementById('outTitle').textContent = 'output';
+}
+
+function runAction(action) {
+  if (!curIp) return;
+  const dot = document.getElementById('liveDot');
+  const out = document.getElementById('out');
+  const title = document.getElementById('outTitle');
+  dot.className = 'live on';
+  title.textContent = action + ' → ' + curIp + ' (running…)';
+  out.textContent = 'Running ' + action + ' against ' + curIp + ' …';
+  document.querySelectorAll('.act-btn').forEach(b => b.disabled = true);
+
+  const fd = new URLSearchParams({ ip: curIp, action: action });
+  fetch('/workspace/' + jobId + '/action', { method:'POST', body:fd })
+    .then(r => r.json())
+    .then(d => {
+      dot.className = 'live done';
+      title.textContent = (d.label || action) + ' → ' + curIp;
+      out.textContent = d.output || d.error || 'No output.';
+      document.querySelectorAll('.act-btn').forEach(b => b.disabled = false);
+    })
+    .catch(() => {
+      dot.className = 'live';
+      out.textContent = 'Action failed (network).';
+      document.querySelectorAll('.act-btn').forEach(b => b.disabled = false);
+    });
+}
+
+function triage(el, key, state) {
+  const item = el.closest('.triage-item');
+  const wasOn = el.classList.contains('on');
+  item.querySelectorAll('.tb').forEach(b => b.classList.remove('on'));
+  const newState = wasOn ? '' : state;
+  if (!wasOn) el.classList.add('on');
+  const fd = new URLSearchParams({ key: key, state: newState || 'none' });
+  fetch('/workspace/' + jobId + '/triage', { method:'POST', body:fd }).catch(()=>{});
+}
+
+function addManual() {
+  const title = document.getElementById('mfTitle').value.trim();
+  if (!title) { document.getElementById('mfTitle').focus(); return; }
+  const fd = new URLSearchParams({
+    title: title,
+    host: document.getElementById('mfHost').value.trim(),
+    risk: document.getElementById('mfRisk').value,
+    detail: document.getElementById('mfDetail').value.trim(),
+  });
+  fetch('/workspace/' + jobId + '/manual', { method:'POST', body:fd })
+    .then(r => r.json())
+    .then(() => {
+      document.getElementById('mfTitle').value = '';
+      document.getElementById('mfHost').value = '';
+      document.getElementById('mfDetail').value = '';
+      document.querySelector('.manual-form button').textContent = '✓ Added — add another';
+      setTimeout(() => { document.querySelector('.manual-form button').textContent = 'Add to report'; }, 1800);
+    }).catch(()=>{});
+}
+</script>
+</body>
+</html>

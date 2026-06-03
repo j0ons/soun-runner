@@ -1,0 +1,13 @@
+# Soun Runner v3 — dependencies
+# Core (required)
+flask>=3.0.0
+jinja2>=3.1.0
+dnspython>=2.4.0
+
+# PDF generation (optional — HTML report works without it)
+weasyprint>=60.0
+
+# NOTE: Network auto-detection, ISP/ASN lookup, traceroute topology,
+# CVE lookup (NIST NVD), and SSL/TLS analysis all use the Python standard
+# library only (socket, ssl, subprocess, urllib) — no extra packages needed.
+# Nmap must be installed separately on the host (winget/brew install nmap).

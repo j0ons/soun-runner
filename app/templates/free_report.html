@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quick Scan — {{ r.client_name }}</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:#060b14; --card:#0e1829; --border:#1a2d45; --txt:#e2e8f0; --muted:#64748b;
+  --cyan:#0ea5e9; --green:#10b981;
+  --c-crit:#ef4444; --c-high:#f97316; --c-med:#eab308; --c-low:#3b82f6; --c-info:#475569;
+}
+body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif; background:var(--bg); color:var(--txt); font-size:14px; line-height:1.6; }
+
+.cover { background:linear-gradient(160deg,#040c1a,#081525 60%,#060b14); border-bottom:1px solid var(--border); padding:2.5rem 2.5rem 2rem; display:flex; justify-content:space-between; align-items:flex-start; gap:2rem; }
+.brand-row { display:flex; align-items:center; gap:0.6rem; margin-bottom:1.25rem; }
+.brand-mark { width:30px; height:30px; background:linear-gradient(135deg,#0ea5e9,#6366f1); border-radius:7px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:800; font-size:16px; }
+.brand-logo { width:38px; height:38px; object-fit:contain; }
+.brand-name { font-size:0.78rem; font-weight:700; color:#94a3b8; }
+.eyebrow { font-size:0.66rem; font-weight:700; color:var(--cyan); text-transform:uppercase; letter-spacing:0.12em; margin-bottom:0.5rem; }
+.cover h1 { font-size:1.9rem; font-weight:800; color:#f8fafc; letter-spacing:-0.02em; line-height:1.15; margin-bottom:0.3rem; }
+.cover h1 em { color:var(--cyan); font-style:normal; }
+.cover-sub { font-size:0.85rem; color:var(--muted); margin-bottom:1.25rem; }
+.cover-meta { display:flex; gap:2rem; flex-wrap:wrap; }
+.meta-item label { display:block; font-size:0.64rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--muted); margin-bottom:0.2rem; }
+.meta-item span { font-size:0.82rem; color:#94a3b8; font-weight:500; }
+.risk-block { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:1.25rem 1.75rem; text-align:center; min-width:160px; flex-shrink:0; }
+.risk-block label { font-size:0.64rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--muted); display:block; margin-bottom:0.5rem; }
+.risk-name { font-size:1.3rem; font-weight:900; text-transform:uppercase; }
+
+.content { padding:2rem 2.5rem; max-width:980px; }
+.summary-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:0.875rem; margin-bottom:2rem; }
+.stat-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:1rem 1.1rem; }
+.stat-num { font-size:1.9rem; font-weight:900; line-height:1; margin-bottom:0.3rem; }
+.stat-num.crit { color:var(--c-crit); } .stat-num.high { color:var(--c-high); } .stat-num.neutral { color:#94a3b8; } .stat-num.safe { color:var(--green); }
+.stat-lbl { font-size:0.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+
+.section { margin-bottom:2.25rem; }
+.section-title { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:1rem; padding-bottom:0.5rem; border-bottom:1px solid var(--border); }
+.exec { background:linear-gradient(135deg,#080f1e,#0b1528); border:1px solid #1e3550; border-radius:12px; padding:1.25rem 1.5rem; font-size:0.9rem; color:#cbd5e1; line-height:1.7; }
+
+.finding { background:var(--card); border:1px solid var(--border); border-left:3px solid; border-radius:8px; padding:0.85rem 1.1rem; margin-bottom:0.6rem; display:flex; gap:0.875rem; align-items:flex-start; }
+.finding.critical { border-left-color:var(--c-crit); } .finding.high { border-left-color:var(--c-high); } .finding.medium { border-left-color:var(--c-med); }
+.risk-pill { display:inline-block; padding:0.2rem 0.5rem; border-radius:5px; font-size:0.64rem; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; white-space:nowrap; flex-shrink:0; }
+.risk-pill.critical { background:#200808; color:#f87171; border:1px solid #7f1d1d; }
+.risk-pill.high { background:#201008; color:#fb923c; border:1px solid #7c2d12; }
+.risk-pill.medium { background:#201a08; color:#fcd34d; border:1px solid #78350f; }
+.f-body { flex:1; min-width:0; }
+.f-title { font-size:0.88rem; font-weight:700; color:#f1f5f9; margin-bottom:0.2rem; }
+.f-host { display:inline-block; background:#0a1220; border:1px solid var(--border); border-radius:4px; padding:0.1rem 0.45rem; font-size:0.7rem; font-family:monospace; color:#94a3b8; margin-bottom:0.35rem; }
+.f-note { font-size:0.8rem; color:#94a3b8; line-height:1.5; }
+.fix-box { margin-top:0.6rem; background:#040e1c; border:1px solid #0c2035; border-radius:6px; padding:0.6rem 0.8rem; font-size:0.78rem; color:#38bdf8; line-height:1.5; }
+.fix-label { display:block; font-size:0.6rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:#0284c7; margin-bottom:0.25rem; }
+
+.data-wrap { background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+table { width:100%; border-collapse:collapse; font-size:0.82rem; }
+th { text-align:left; padding:0.6rem 0.8rem; background:#080f1c; color:var(--muted); font-size:0.64rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); }
+td { padding:0.6rem 0.8rem; border-bottom:1px solid #0d1525; }
+tr:last-child td { border-bottom:none; }
+.td-ip { font-family:monospace; color:#94a3b8; }
+.td-ports { font-family:monospace; color:var(--muted); font-size:0.74rem; }
+.dev { display:flex; align-items:center; gap:0.4rem; }
+
+.empty { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:1.5rem; text-align:center; color:var(--muted); font-size:0.875rem; }
+
+.cta { background:linear-gradient(135deg,#07111f,#0b1929); border:1px solid #1e3550; border-radius:12px; padding:2rem; text-align:center; margin-top:1.5rem; }
+.cta h2 { font-size:1.2rem; font-weight:800; color:#f8fafc; margin-bottom:0.5rem; }
+.cta p { color:var(--muted); font-size:0.85rem; max-width:540px; margin:0 auto 1.25rem; line-height:1.6; }
+.cta-list { display:flex; justify-content:center; gap:1.5rem; flex-wrap:wrap; font-size:0.78rem; color:#7dd3fc; }
+.cta-contacts { margin-top:1.25rem; display:flex; justify-content:center; gap:2rem; flex-wrap:wrap; font-size:0.85rem; color:#38bdf8; }
+
+.disclaimer { background:#0b1220; border-top:1px solid var(--border); padding:1.25rem 2.5rem; font-size:0.72rem; color:#374151; line-height:1.7; }
+
+@media print {
+  body { background:#fff; color:#000; font-size:11px; }
+  .cover { background:#f1f5f9; border-bottom:2px solid #cbd5e1; flex-direction:column; }
+  .cover h1, .eyebrow { color:#0f172a !important; }
+  .risk-block { background:#f8fafc; border-color:#e2e8f0; width:100%; margin-top:1.25rem; }
+  .finding, .stat-card, .data-wrap, .cta, .exec { border-color:#e2e8f0 !important; background:#fff !important; }
+  .finding { break-inside:avoid; }
+}
+</style>
+</head>
+<body>
+
+{% set is_eng = (variant == 'engineer') %}
+<div class="cover">
+  <div>
+    <div class="brand-row"><img class="brand-logo" src="{{ logo_uri }}" alt="Soun Al Hosn"><span class="brand-name">Soun Al Hosn Cybersecurity LLC · Dubai, UAE</span></div>
+    <div class="eyebrow">Free Quick Scan{% if is_eng %} — Engineer Copy{% else %} — Client Summary{% endif %}</div>
+    <h1>Network <em>Quick Scan</em></h1>
+    <div class="cover-sub">{% if is_eng %}Technical findings with remediation steps{% else %}A plain-language overview of what we found{% endif %}</div>
+    <div class="cover-meta">
+      <div class="meta-item"><label>{% if is_eng %}Scanned For{% else %}Prepared For{% endif %}</label><span>{{ r.client_name }}</span></div>
+      <div class="meta-item"><label>{% if is_eng %}Target{% else %}Network{% endif %}</label><span>{{ r.target }}</span></div>
+      <div class="meta-item"><label>Date</label><span>{{ r.generated_at }}</span></div>
+    </div>
+  </div>
+  <div class="risk-block">
+    <label>Risk</label>
+    <div class="risk-name" style="color:{{ r.overall_risk_color }}">{{ r.overall_risk_label }}</div>
+  </div>
+</div>
+
+<div class="content">
+  <div class="summary-grid">
+    <div class="stat-card"><div class="stat-num neutral">{{ r.hosts_up }}</div><div class="stat-lbl">Hosts</div></div>
+    <div class="stat-card"><div class="stat-num neutral">{{ r.total_open_ports }}</div><div class="stat-lbl">Open Services</div></div>
+    <div class="stat-card"><div class="stat-num {% if r.critical_count %}crit{% else %}safe{% endif %}">{{ r.critical_count }}</div><div class="stat-lbl">Critical</div></div>
+    <div class="stat-card"><div class="stat-num {% if r.high_count %}high{% else %}safe{% endif %}">{{ r.high_count }}</div><div class="stat-lbl">High</div></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Summary</div>
+    <div class="exec">{{ r.summary }}</div>
+  </div>
+
+  {% if r.host_rows %}
+  <div class="section">
+    <div class="section-title">{% if is_eng %}Discovered Hosts{% else %}Devices Found on Your Network{% endif %} ({{ r.host_rows|length }})</div>
+    {% if not is_eng %}
+    <p style="font-size:0.82rem;color:var(--muted);margin-bottom:0.875rem;line-height:1.5;">
+      We detected {{ r.host_rows|length }} active device{{ 's' if r.host_rows|length != 1 }} on your network. Devices marked with a risk level have services exposed that need attention.
+    </p>
+    {% endif %}
+    <div class="data-wrap">
+      <table>
+        <thead>
+          {% if is_eng %}
+          <tr><th>Device</th><th>IP</th><th>Open Ports</th><th>Risk</th></tr>
+          {% else %}
+          <tr><th>Device</th><th>Address</th><th>Status</th></tr>
+          {% endif %}
+        </thead>
+        <tbody>
+          {% for h in r.host_rows %}
+          <tr>
+            <td><div class="dev"><span class="dev-name">{{ h.device_type }}</span></div></td>
+            <td class="td-ip">{{ h.ip }}</td>
+            {% if is_eng %}
+            <td class="td-ports">{{ h.ports or '—' }}</td>
+            <td><span class="risk-pill {{ h.risk if h.risk in ('critical','high','medium') else '' }}" style="{% if h.risk not in ('critical','high','medium') %}background:#0d1117;color:#6b7280;border:1px solid #374151;{% endif %}">{{ h.risk_label }}</span></td>
+            {% else %}
+            <td>{% if h.risk in ('critical','high','medium') %}<span class="risk-pill {{ h.risk }}">Needs attention</span>{% else %}<span style="color:var(--green);font-size:0.78rem;">✓ No issues found</span>{% endif %}</td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="section">
+    <div class="section-title">{% if is_eng %}Exposed Services{% else %}Issues That Need Attention{% endif %} {% if r.findings %}({{ r.total_findings }}){% endif %}</div>
+    {% if not r.findings %}
+    <div class="empty">✓ No high-risk exposed services detected in this quick scan.{% if r.hosts_up == 0 %} (No hosts found — verify the subnet.){% endif %}</div>
+    {% else %}
+    {% for f in r.findings %}
+    <div class="finding {{ f.risk }}">
+      <span class="risk-pill {{ f.risk }}">{{ f.risk_label }}</span>
+      <div class="f-body">
+        {% if is_eng %}
+        <div class="f-title">{{ f.service }} exposed{% if f.port %} on port {{ f.port }}{% endif %}</div>
+        <div class="f-host">{{ f.host }}{% if f.port %}:{{ f.port }}{% endif %}</div>
+        <div class="f-note">{{ f.note }}</div>
+        <div class="fix-box"><span class="fix-label">→ How to fix</span>{{ f.fix }}</div>
+        {% else %}
+        <div class="f-title">{{ f.plain_what }}</div>
+        <div class="f-host">Found on device {{ f.host }}</div>
+        <div class="f-note">{{ f.plain_why }}</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+
+  <div class="cta">
+    {% if is_eng %}
+    <h2>Recommended Next Step: Full Assessment</h2>
+    <p>This free scan covers network exposure only. A full Soun Al Hosn assessment adds deep configuration auditing (SMB signing, RDP NLA, weak TLS), lateral-movement validation, CVE intelligence, compliance mapping (NESA / ISO 27001 / PCI-DSS), and a prioritised remediation runbook with proof-of-fix re-scan.</p>
+    <div class="cta-list"><span>▸ Deep service probing</span><span>▸ Lateral-movement analysis</span><span>▸ Compliance mapping</span><span>▸ Remediation runbook</span></div>
+    {% else %}
+    <h2>{% if r.critical_count or r.high_count %}Your Network Has Risks That Need Attention{% else %}Want Real Peace of Mind?{% endif %}</h2>
+    <p>{% if r.critical_count or r.high_count %}This quick scan already found {{ r.critical_count + r.high_count }} serious issue{{ 's' if (r.critical_count + r.high_count) != 1 }} an attacker could use. A full Soun Al Hosn assessment finds everything, explains it in plain language, and — most importantly — <strong style="color:#e2e8f0;">we fix it for you</strong> and prove it's fixed.{% else %}This was only a surface check. A full Soun Al Hosn assessment looks deep inside your network, checks your backups and defenses, and gives you a clear plan to stay protected — with the fixes done for you.{% endif %}</p>
+    <div class="cta-list"><span>▸ We find the problems</span><span>▸ We explain them simply</span><span>▸ We fix them for you</span><span>▸ We prove it's done</span></div>
+    {% endif %}
+    <div class="cta-contacts"><span>info@sounalhosn.ae</span><span>+971 52 203 4204</span><span>sounalhosn.ae</span></div>
+  </div>
+</div>
+
+<div class="disclaimer">
+  <strong style="color:#475569;">Free Quick Scan:</strong> This is a surface-level, non-intrusive network scan provided by Soun Al Hosn Cybersecurity.
+  It identifies live hosts and exposed services only — it is not a full security assessment or penetration test.
+  All scanning was performed with authorization on the defined scope. © {{ r.generated_at.split(',')[0].split(' ')[-1] }} Soun Al Hosn Cybersecurity LLC · Dubai, UAE
+</div>
+</body>
+</html>

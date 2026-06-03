@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOUN RUNNER — Free Scan</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:#05080d; --panel:#0a0f17; --line:#16202e; --line2:#1d2c3e;
+  --txt:#c8d4e0; --dim:#4a5b6e; --grn:#2dd47f; --grn-d:#0d7a45; --cyan:#2bb8e8; --red:#ff4d4d;
+  --mono:'SF Mono','Cascadia Code','Fira Code','Consolas',monospace;
+}
+body { font-family:var(--mono); background:var(--bg); color:var(--txt); min-height:100vh; font-size:13px; line-height:1.5;
+  background-image:linear-gradient(rgba(45,212,127,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(45,212,127,0.015) 1px,transparent 1px); background-size:32px 32px; }
+body::after { content:''; position:fixed; inset:0; pointer-events:none; background:repeating-linear-gradient(0deg,rgba(0,0,0,0.12) 0,rgba(0,0,0,0.12) 1px,transparent 1px,transparent 3px); opacity:0.3; z-index:9999; mix-blend-mode:multiply; }
+.topbar { border-bottom:1px solid var(--line); background:linear-gradient(180deg,#070b11,var(--bg)); padding:0 1.5rem; height:52px; display:flex; align-items:center; gap:0.7rem; }
+.brand-glyph { width:30px; height:30px; border:1px solid #143040; border-radius:4px; display:flex; align-items:center; justify-content:center; color:var(--cyan); font-size:15px; }
+.brand-txt { font-weight:700; letter-spacing:0.06em; color:#e8f0f7; font-size:0.92rem; } .brand-txt .accent { color:var(--cyan); }
+.brand-sub { font-size:0.62rem; color:var(--dim); letter-spacing:0.12em; display:block; margin-top:-1px; }
+.back { margin-left:auto; color:var(--dim); text-decoration:none; font-size:0.7rem; }
+.back:hover { color:var(--cyan); }
+.wrap { max-width:520px; margin:0 auto; padding:2.5rem 1.5rem; }
+.tag { display:inline-block; background:#0a2a44; color:#5cc8f0; font-size:0.62rem; letter-spacing:0.12em; text-transform:uppercase; padding:0.2rem 0.6rem; border-radius:4px; margin-bottom:0.75rem; }
+h1 { font-size:1.3rem; color:#e8f0f7; font-weight:700; letter-spacing:0.02em; margin-bottom:0.4rem; }
+.sub { color:var(--dim); font-size:0.78rem; margin-bottom:1.75rem; line-height:1.5; }
+.panel { border:1px solid var(--line); border-radius:6px; background:var(--panel); padding:1.5rem; }
+.warn { border:1px solid #6b4a0a; border-radius:5px; background:#140f04; padding:0.7rem 0.9rem; margin-bottom:1.25rem; font-size:0.74rem; color:#e0a818; }
+.errbox { border:1px solid #6b1414; border-radius:5px; background:#140707; padding:0.7rem 0.9rem; margin-bottom:1.25rem; }
+.errbox div { color:#ff7a7a; font-size:0.74rem; }
+.recon-line { display:flex; flex-wrap:wrap; gap:0.4rem 1rem; font-size:0.72rem; color:var(--dim); border:1px solid var(--line); border-radius:5px; background:#0c121c; padding:0.5rem 0.75rem; margin-bottom:1.25rem; }
+.recon-line b { color:var(--txt); }
+.fld { margin-bottom:1.1rem; }
+.fld-lbl { display:block; font-size:0.64rem; letter-spacing:0.12em; color:var(--dim); text-transform:uppercase; margin-bottom:0.35rem; }
+.req { color:var(--red); }
+.in { width:100%; background:#060a10; border:1px solid var(--line2); border-radius:4px; padding:0.6rem 0.75rem; color:var(--cyan); font-family:var(--mono); font-size:0.85rem; outline:none; }
+.in:focus { border-color:var(--cyan); box-shadow:0 0 0 1px var(--cyan); }
+.in::placeholder { color:#2a3949; }
+.hint { font-size:0.66rem; color:var(--dim); margin-top:0.3rem; }
+.run-btn { width:100%; background:linear-gradient(180deg,#1192c9,#0d6f9a); border:1px solid #1aa7e0; border-radius:5px; padding:0.8rem; color:#021016; font-family:var(--mono); font-weight:700; font-size:0.85rem; letter-spacing:0.1em; cursor:pointer; text-transform:uppercase; margin-top:0.5rem; box-shadow:0 0 16px rgba(43,184,232,0.2); }
+.run-btn:hover { box-shadow:0 0 24px rgba(43,184,232,0.35); }
+.run-btn:disabled { opacity:0.4; cursor:not-allowed; box-shadow:none; }
+.note { font-size:0.7rem; color:var(--dim); margin-top:1rem; line-height:1.5; text-align:center; }
+.note a { color:var(--grn); text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand-glyph"><img src="{{ logo_uri }}" alt="Soun" style="width:26px;height:26px;object-fit:contain;"></div>
+  <div><div class="brand-txt">SOUN<span class="accent">RUNNER</span></div><span class="brand-sub">FREE QUICK SCAN</span></div>
+  <a class="back" href="/">← back</a>
+</div>
+
+<div class="wrap">
+  <span class="tag">Free Scan</span>
+  <h1>Quick Network Look</h1>
+  <div class="sub">Discovers live hosts and flags exposed dangerous services. Fast surface-level scan — no deep auditing.</div>
+
+  <div class="panel">
+    {% if not nmap_found %}
+    <div class="warn"><b>⚠ NMAP NOT DETECTED</b> — install nmap and restart.</div>
+    {% endif %}
+    {% if errors %}<div class="errbox">{% for e in errors %}<div>✗ {{ e }}</div>{% endfor %}</div>{% endif %}
+
+    {% if net and net.subnet %}
+    <div class="recon-line"><span>detected subnet <b>{{ net.subnet }}</b></span>{% if net.isp %}<span>· {{ net.isp[:24] }}</span>{% endif %}</div>
+    {% endif %}
+
+    <form method="POST" action="/free/scan" id="freeForm">
+      <div class="fld">
+        <label class="fld-lbl">Name <span style="color:var(--dim);text-transform:none;letter-spacing:0;">(optional)</span></label>
+        <input class="in" type="text" name="client_name" placeholder="Quick Scan" value="{{ client_name or '' }}" autocomplete="off">
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Target — subnet / IP <span class="req">*</span></label>
+        <input class="in" type="text" name="target" placeholder="192.168.1.0/24"
+               value="{{ target or (net.subnet if net else '') }}" required autocomplete="off">
+        <div class="hint">Defaults to the detected local subnet.</div>
+      </div>
+      <button class="run-btn" type="submit" id="runBtn" {% if not nmap_found %}disabled{% endif %}>▶ Run Free Scan</button>
+    </form>
+  </div>
+
+  <div class="note">Need the full picture? The <a href="/">Advanced assessment</a> adds deep probing, compliance &amp; a fix roadmap.</div>
+</div>
+
+<script>
+document.getElementById('freeForm').addEventListener('submit', function(){
+  const b=document.getElementById('runBtn'); b.disabled=true; b.textContent='⟳ scanning…';
+});
+</script>
+</body>
+</html>

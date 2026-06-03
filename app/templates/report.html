@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Network Security Assessment — {{ r.client_name }}</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:       #060b14;
+  --surface:  #0b1220;
+  --card:     #0e1829;
+  --border:   #1a2d45;
+  --border2:  #1e3550;
+  --text:     #e2e8f0;
+  --muted:    #64748b;
+  --accent:   #0ea5e9;
+  --green:    #10b981;
+  --c-crit:   #ef4444;
+  --c-high:   #f97316;
+  --c-med:    #eab308;
+  --c-low:    #3b82f6;
+  --c-info:   #475569;
+  --c-pass:   #10b981;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ── Cover ──────────────────────────────────────────────────────────────── */
+.cover {
+  background: linear-gradient(160deg, #040c1a 0%, #081525 50%, #060b14 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 3rem 3rem 2.5rem;
+  position: relative;
+  overflow: hidden;
+}
+.cover::before {
+  content: '';
+  position: absolute;
+  top: -80px; right: -80px;
+  width: 300px; height: 300px;
+  background: radial-gradient(circle, rgba(14,165,233,0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+.cover-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 2rem;
+}
+.cover-left { flex: 1; }
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.75rem;
+}
+.brand-mark {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, #0ea5e9, #6366f1);
+  border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; font-weight: 800; color: #fff;
+}
+.brand-logo { width: 40px; height: 40px; object-fit: contain; }
+.brand-name { font-size: 0.8rem; font-weight: 700; color: #94a3b8; letter-spacing: 0.02em; }
+
+.cover-eyebrow {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 0.6rem;
+}
+.cover h1 {
+  font-size: 2.25rem;
+  font-weight: 900;
+  color: #f8fafc;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin-bottom: 0.4rem;
+}
+.cover h1 em { color: var(--accent); font-style: normal; }
+.cover-tagline { font-size: 0.875rem; color: var(--muted); margin-bottom: 1.5rem; }
+
+.cover-meta {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+.meta-item label {
+  display: block;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 0.2rem;
+}
+.meta-item span {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/* Risk score block */
+.risk-block {
+  background: var(--card);
+  border: 1px solid var(--border2);
+  border-radius: 14px;
+  padding: 1.5rem 2rem;
+  text-align: center;
+  min-width: 180px;
+  flex-shrink: 0;
+}
+.risk-block-lbl {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+  display: block;
+}
+.risk-name {
+  font-size: 1.4rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+.risk-score-bar {
+  height: 6px;
+  background: #0e1829;
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+.risk-score-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.4s ease;
+}
+.risk-score-num {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.risk-findings {
+  margin-top: 0.75rem;
+  font-size: 0.72rem;
+  color: #475569;
+}
+.risk-findings strong { color: #94a3b8; }
+
+/* ── Content ────────────────────────────────────────────────────────────── */
+.content { padding: 2.5rem 3rem; max-width: 1200px; }
+
+.section { margin-bottom: 3rem; }
+.section-hdr {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+/* Thin accent bar replaces the emoji icon box — restrained, document-like */
+.section-hdr-icon {
+  width: 3px; height: 15px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  align-self: center;
+  font-size: 0;            /* hide any emoji glyph inside */
+  background: currentColor;
+}
+.section-hdr h2 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #e8eef5;
+}
+.section-hdr .section-count {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: var(--muted);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 0.15rem 0.6rem;
+}
+
+/* ── Exec summary ───────────────────────────────────────────────────────── */
+.exec-card {
+  background: linear-gradient(135deg, #080f1e, #0b1528);
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  padding: 1.5rem;
+  font-size: 0.92rem;
+  color: #cbd5e1;
+  line-height: 1.8;
+}
+
+/* ── Summary grid ───────────────────────────────────────────────────────── */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.875rem;
+  margin-bottom: 2.5rem;
+}
+.stat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  position: relative;
+  overflow: hidden;
+}
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+}
+.stat-card.critical::before { background: var(--c-crit); }
+.stat-card.high::before     { background: var(--c-high); }
+.stat-card.medium::before   { background: var(--c-med); }
+.stat-card.low::before      { background: var(--c-low); }
+.stat-card.neutral::before  { background: var(--border2); }
+.stat-num {
+  font-size: 2rem;
+  font-weight: 900;
+  line-height: 1;
+  margin-bottom: 0.3rem;
+}
+.stat-num.critical { color: var(--c-crit); }
+.stat-num.high     { color: var(--c-high); }
+.stat-num.medium   { color: var(--c-med); }
+.stat-num.low      { color: var(--c-low); }
+.stat-num.neutral  { color: #94a3b8; }
+.stat-num.safe     { color: var(--green); }
+.stat-lbl { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* ── Findings ───────────────────────────────────────────────────────────── */
+.finding {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 3px solid;
+  border-radius: 10px;
+  margin-bottom: 0.875rem;
+  overflow: hidden;
+}
+.finding.critical { border-left-color: var(--c-crit); }
+.finding.high     { border-left-color: var(--c-high); }
+.finding.medium   { border-left-color: var(--c-med); }
+.finding.low      { border-left-color: var(--c-low); }
+.finding.info     { border-left-color: var(--c-info); }
+
+.finding-head {
+  padding: 0.9rem 1.2rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  cursor: pointer;
+}
+.finding-head:hover { background: rgba(255,255,255,0.02); }
+
+.risk-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 5px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.risk-pill.critical { background: #200808; color: #f87171; border: 1px solid #7f1d1d; }
+.risk-pill.high     { background: #201008; color: #fb923c; border: 1px solid #7c2d12; }
+.risk-pill.medium   { background: #201a08; color: #fcd34d; border: 1px solid #78350f; }
+.risk-pill.low      { background: #080e20; color: #60a5fa; border: 1px solid #1e3a8a; }
+.risk-pill.info     { background: #0d1117; color: #6b7280; border: 1px solid #374151; }
+
+.finding-main { flex: 1; min-width: 0; }
+.finding-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  line-height: 1.3;
+  margin-bottom: 0.25rem;
+}
+.finding-host {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: #0a1220;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.7rem;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  color: #94a3b8;
+}
+.finding-port { color: var(--accent); font-weight: 600; }
+.finding-toggle { font-size: 0.75rem; color: var(--muted); flex-shrink: 0; margin-top: 2px; transition: transform 0.2s; }
+.finding-toggle.open { transform: rotate(180deg); }
+
+.finding-body { padding: 0 1.2rem 1.1rem 1.2rem; padding-left: calc(1.2rem + 70px); display: none; }
+.finding-body.open { display: block; }
+
+.finding-detail {
+  font-size: 0.83rem;
+  color: #94a3b8;
+  margin-bottom: 0.75rem;
+  line-height: 1.6;
+}
+.rec-box {
+  background: #040e1c;
+  border: 1px solid #0c2035;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.8rem;
+  color: #38bdf8;
+  line-height: 1.6;
+}
+.rec-box .rec-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #0284c7;
+  display: block;
+  margin-bottom: 0.3rem;
+}
+
+/* CVE table */
+.cve-list {
+  margin-top: 0.875rem;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.cve-list-hdr {
+  padding: 0.5rem 0.875rem;
+  background: #080f1c;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border-bottom: 1px solid var(--border);
+}
+.cve-row {
+  display: grid;
+  grid-template-columns: 140px 50px 90px 1fr;
+  gap: 0.75rem;
+  padding: 0.55rem 0.875rem;
+  border-bottom: 1px solid #0d1525;
+  align-items: center;
+  font-size: 0.775rem;
+}
+.cve-row:last-child { border-bottom: none; }
+.cve-id { font-family: monospace; color: var(--accent); font-weight: 600; }
+.cve-id a { color: inherit; text-decoration: none; }
+.cve-id a:hover { text-decoration: underline; }
+.cve-score { font-weight: 700; }
+.cve-score.critical { color: var(--c-crit); }
+.cve-score.high     { color: var(--c-high); }
+.cve-score.medium   { color: var(--c-med); }
+.cve-score.low      { color: var(--c-low); }
+.cve-sev { font-size: 0.68rem; }
+.cve-desc { color: #94a3b8; font-size: 0.75rem; line-height: 1.4; }
+
+/* ── Host table ─────────────────────────────────────────────────────────── */
+.data-table-wrap {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+table.data-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+table.data-table th {
+  text-align: left;
+  padding: 0.65rem 0.9rem;
+  background: #080f1c;
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  border-bottom: 1px solid var(--border);
+}
+table.data-table td {
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid #0d1525;
+  vertical-align: middle;
+}
+table.data-table tr:last-child td { border-bottom: none; }
+table.data-table tbody tr:hover td { background: rgba(14,165,233,0.03); }
+.td-ip { font-family: monospace; color: #94a3b8; font-size: 0.8rem; }
+.td-hn { color: var(--text); }
+.td-os { color: var(--muted); font-size: 0.78rem; }
+.td-ports { font-family: monospace; color: var(--muted); font-size: 0.72rem; max-width: 260px; word-break: break-all; }
+.td-vendor { color: var(--muted); font-size: 0.75rem; }
+
+/* Status dot for DNS */
+.status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.sdot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.sdot.pass  { background: var(--green); }
+.sdot.fail  { background: var(--c-crit); }
+.sdot.warn  { background: var(--c-med); }
+.sdot.error { background: var(--muted); }
+.sdot.info  { background: var(--c-info); }
+
+/* SSL findings */
+.ssl-finding {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 0.625rem;
+  display: flex;
+  gap: 0.875rem;
+  align-items: flex-start;
+}
+.ssl-host-chip {
+  background: #0a1220;
+  border: 1px solid var(--border2);
+  border-radius: 5px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.7rem;
+  font-family: monospace;
+  color: var(--accent);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ssl-finding-body { flex: 1; }
+.ssl-finding-name { font-size: 0.85rem; font-weight: 600; color: #f1f5f9; margin-bottom: 0.2rem; }
+.ssl-finding-detail { font-size: 0.78rem; color: #94a3b8; line-height: 1.5; }
+
+/* ── Engineer notes ─────────────────────────────────────────────────────── */
+.eng-notes-wrap {
+  background: #050c14;
+  border: 1px solid #0e1e2e;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.eng-notes-hdr {
+  padding: 0.75rem 1.1rem;
+  background: #060d18;
+  border-bottom: 1px solid #0e1e2e;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.eng-note {
+  padding: 0.6rem 1.1rem;
+  border-bottom: 1px solid #0a1520;
+  font-size: 0.775rem;
+  color: #475569;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  line-height: 1.5;
+}
+.eng-note:last-child { border-bottom: none; }
+.eng-note .note-tag {
+  color: #1d4ed8;
+  font-weight: 700;
+  margin-right: 0.3rem;
+}
+
+/* ── Scope note ─────────────────────────────────────────────────────────── */
+.scope-note {
+  background: #080c14;
+  border: 1px solid #0e1a28;
+  border-radius: 8px;
+  padding: 0.875rem 1.1rem;
+  font-size: 0.775rem;
+  color: #374151;
+  line-height: 1.65;
+  margin-bottom: 2rem;
+}
+.scope-note strong { color: #475569; }
+
+/* ── CTA ────────────────────────────────────────────────────────────────── */
+.cta-box {
+  background: linear-gradient(135deg, #07111f, #0b1929);
+  border: 1px solid var(--border2);
+  border-radius: 14px;
+  padding: 2.25rem;
+  text-align: center;
+  margin-bottom: 2rem;
+  position: relative;
+  overflow: hidden;
+}
+.cta-box::before {
+  content: '';
+  position: absolute;
+  bottom: -60px; left: 50%;
+  transform: translateX(-50%);
+  width: 400px; height: 200px;
+  background: radial-gradient(circle, rgba(14,165,233,0.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+.cta-box h2 {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #f8fafc;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.02em;
+}
+.cta-box p {
+  color: var(--muted);
+  font-size: 0.875rem;
+  max-width: 560px;
+  margin: 0 auto 1.75rem;
+  line-height: 1.7;
+}
+.cta-contacts {
+  display: flex;
+  justify-content: center;
+  gap: 2.5rem;
+  flex-wrap: wrap;
+}
+.cta-contact {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+  color: #38bdf8;
+  font-weight: 500;
+}
+.cta-contact span.icon { color: var(--muted); font-size: 1rem; }
+
+/* ── Disclaimer ─────────────────────────────────────────────────────────── */
+.disclaimer {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 1.5rem 3rem;
+  font-size: 0.72rem;
+  color: #374151;
+  line-height: 1.8;
+}
+.disclaimer strong { color: #475569; }
+
+/* ── Perimeter / topology ───────────────────────────────────────────────── */
+.perimeter-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+}
+.perimeter-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+.peri-item { }
+.peri-item label { display: block; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 0.3rem; }
+.peri-item .v { font-size: 0.92rem; color: #e2e8f0; font-weight: 600; word-break: break-word; }
+.peri-item .v.cyan { color: #38bdf8; }
+.peri-item .v.mono { font-family: monospace; font-size: 0.85rem; }
+
+/* path / hops */
+.path-flow { display: flex; flex-direction: column; gap: 0; margin-top: 0.5rem; }
+.hop {
+  display: grid;
+  grid-template-columns: 44px 24px 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid #0d1525;
+  position: relative;
+}
+.hop:last-child { border-bottom: none; }
+.hop-num { font-family: monospace; font-size: 0.75rem; color: var(--muted); text-align: right; }
+.hop-node {
+  width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; flex-shrink: 0; border: 2px solid;
+}
+.hop-node.gateway { border-color: #10b981; color: #10b981; background: #052e16; }
+.hop-node.internal { border-color: #3b82f6; color: #3b82f6; background: #0a1428; }
+.hop-node.isp { border-color: #a78bfa; color: #a78bfa; background: #1a0a2e; }
+.hop-node.timeout { border-color: #374151; color: #374151; background: #0d1117; }
+.hop-info { min-width: 0; }
+.hop-ip { font-family: monospace; font-size: 0.82rem; color: #e2e8f0; }
+.hop-ip.dim { color: #374151; }
+.hop-meta { font-size: 0.7rem; color: var(--muted); }
+.hop-meta .asn { color: #a78bfa; }
+.hop-role {
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 0.15rem 0.5rem; border-radius: 4px; white-space: nowrap;
+}
+.hop-role.gateway { background: #052e16; color: #34d399; border: 1px solid #14532d; }
+.hop-role.internal { background: #0a1428; color: #60a5fa; border: 1px solid #1e3a5f; }
+.hop-role.isp { background: #1a0a2e; color: #c4b5fd; border: 1px solid #4c1d95; }
+.hop-role.timeout { background: #0d1117; color: #374151; border: 1px solid #1f2937; }
+
+/* asset inventory */
+.asset-row .dev-cell { display: flex; align-items: center; gap: 0.5rem; }
+.dev-icon { font-size: 1.05rem; }
+.dev-type { font-size: 0.8rem; color: #e2e8f0; }
+.dev-gw-tag { font-size: 0.58rem; background: #052e16; color: #34d399; border: 1px solid #14532d; border-radius: 3px; padding: 1px 5px; margin-left: 0.3rem; letter-spacing: 0.05em; }
+
+/* attack paths */
+.attack-card {
+  background: linear-gradient(135deg, #1a0808, #140a0a);
+  border: 1px solid #3d1414;
+  border-left: 3px solid #ef4444;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.75rem;
+}
+.attack-label {
+  font-size: 0.7rem; font-weight: 800; color: #f87171; letter-spacing: 0.08em;
+  text-transform: uppercase; margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.4rem;
+}
+.attack-text { font-size: 0.83rem; color: #cbd5e1; line-height: 1.6; }
+.attack-text .mit { color: #34d399; }
+
+/* ── Validation agent ───────────────────────────────────────────────────── */
+.agent-banner {
+  background: linear-gradient(135deg,#1a0808,#160a14); border:1px solid #3d1428;
+  border-radius:10px; padding:1rem 1.25rem; margin-bottom:1rem; display:flex; align-items:center; gap:1rem;
+}
+.agent-stat { text-align:center; padding:0 1rem; }
+.agent-stat-num { font-size:1.8rem; font-weight:800; color:#f87171; line-height:1; }
+.agent-stat-lbl { font-size:0.62rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; margin-top:0.25rem; }
+.agent-desc { font-size:0.8rem; color:#cbd5e1; line-height:1.5; flex:1; }
+.reach-table { width:100%; border-collapse:collapse; font-size:0.78rem; }
+.reach-table th { text-align:left; padding:0.5rem 0.75rem; background:#080f1c; color:var(--muted); font-size:0.62rem; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; border-bottom:1px solid var(--border); }
+.reach-table td { padding:0.5rem 0.75rem; border-bottom:1px solid #0d1525; }
+.reach-table tr:last-child td { border-bottom:none; }
+.reach-dst { font-family:monospace; color:#e2e8f0; }
+.reach-svc { color:#f87171; font-weight:600; }
+.reach-yes { color:#f87171; font-weight:700; }
+
+/* ── Web panels ─────────────────────────────────────────────────────────── */
+.panel-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 0.9rem 1.1rem; margin-bottom: 0.6rem; display: flex; gap: 0.875rem; align-items: flex-start;
+}
+.panel-type-chip {
+  background: #1a0a2e; color: #c4b5fd; border: 1px solid #4c1d95; border-radius: 5px;
+  padding: 0.2rem 0.55rem; font-size: 0.7rem; white-space: nowrap; flex-shrink: 0; font-weight: 600;
+}
+.panel-info { flex: 1; min-width: 0; }
+.panel-url { font-family: monospace; font-size: 0.8rem; color: #38bdf8; }
+.panel-title-txt { font-size: 0.78rem; color: var(--muted); margin-top: 0.15rem; }
+.panel-server { font-family: monospace; font-size: 0.7rem; color: #475569; }
+
+/* ── Compliance ─────────────────────────────────────────────────────────── */
+.compliance-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.compliance-table th {
+  text-align: left; padding: 0.6rem 0.8rem; background: #080f1c; color: var(--muted);
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; border-bottom: 1px solid var(--border);
+}
+.compliance-table td { padding: 0.65rem 0.8rem; border-bottom: 1px solid #0d1525; vertical-align: top; }
+.compliance-table tr:last-child td { border-bottom: none; }
+.fw-chip { font-family: monospace; font-size: 0.72rem; color: #93c5fd; }
+.ctrl-name { color: #e2e8f0; font-weight: 600; }
+.ctrl-findings { color: var(--muted); font-size: 0.74rem; margin-top: 0.2rem; }
+
+/* ── Runbook ────────────────────────────────────────────────────────────── */
+.runbook-step {
+  display: grid; grid-template-columns: 34px 1fr auto; gap: 0.9rem; align-items: start;
+  background: var(--card); border: 1px solid var(--border); border-left: 3px solid; border-radius: 8px;
+  padding: 0.8rem 1rem; margin-bottom: 0.5rem;
+}
+.runbook-step.critical { border-left-color: var(--c-crit); }
+.runbook-step.high { border-left-color: var(--c-high); }
+.runbook-step.medium { border-left-color: var(--c-med); }
+.runbook-step.low { border-left-color: var(--c-low); }
+.runbook-step.info { border-left-color: var(--c-info); }
+.rb-num { font-size: 1.1rem; font-weight: 800; color: var(--muted); text-align: center; }
+.rb-body { min-width: 0; }
+.rb-title { font-size: 0.85rem; font-weight: 600; color: #f1f5f9; margin-bottom: 0.2rem; }
+.rb-action { font-size: 0.78rem; color: #94a3b8; line-height: 1.5; }
+.rb-effort { text-align: right; flex-shrink: 0; }
+.rb-effort-time { font-size: 0.8rem; font-weight: 700; color: #34d399; white-space: nowrap; }
+.rb-effort-note { font-size: 0.66rem; color: var(--muted); white-space: nowrap; }
+
+/* ── Engineer field assessment ──────────────────────────────────────────── */
+.field-module { margin-bottom: 1rem; }
+.field-module-hdr { font-size: 0.82rem; font-weight: 700; color: #e2e8f0; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; }
+.field-notes { font-size: 0.76rem; color: #94a3b8; font-style: italic; background: #0a1220; border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 0.8rem; margin-top: 0.5rem; }
+
+/* ── Re-scan diff ───────────────────────────────────────────────────────── */
+.diff-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem; }
+.diff-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.25rem; text-align: center; }
+.diff-num { font-size: 2rem; font-weight: 800; line-height: 1; }
+.diff-num.fixed { color: var(--green); }
+.diff-num.open { color: var(--c-high); }
+.diff-num.new { color: var(--c-crit); }
+.diff-lbl { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.3rem; }
+.diff-rate { background: linear-gradient(135deg,#052e16,#08130d); border: 1px solid #14532d; border-radius: 10px; padding: 1rem 1.5rem; text-align: center; margin-bottom: 1rem; }
+.diff-rate-num { font-size: 2.5rem; font-weight: 900; color: var(--green); }
+.diff-rate-lbl { font-size: 0.8rem; color: #34d399; }
+
+/* ── Print ──────────────────────────────────────────────────────────────── */
+@media print {
+  body { background: #fff; color: #000; font-size: 11px; }
+  .cover { background: #f1f5f9; border-bottom: 2px solid #cbd5e1; }
+  .cover h1, .cover-eyebrow { color: #0f172a !important; }
+  /* Stack the cover vertically in print so the risk box can't overlap the brand line */
+  .cover-inner { flex-direction: column; }
+  .risk-block { background: #f8fafc; border-color: #e2e8f0; min-width: 0; width: 100%; margin-top: 1.5rem; }
+  .content { padding: 1.5rem 2rem; }
+  .finding, .stat-card, .data-table-wrap, .cta-box, .exec-card { border-color: #e2e8f0 !important; background: #fff !important; }
+  .disclaimer { background: #f8fafc; }
+  .finding-body { display: block !important; }
+  .finding-toggle { display: none; }
+  /* Section-header emoji icons don't render in PDF — hide the glyph, keep the colored chip */
+  .section-hdr-icon { font-size: 0 !important; }
+  /* Avoid splitting findings/cards across page breaks where possible */
+  .finding, .runbook-step, .panel-card, .ssl-finding, .attack-card { break-inside: avoid; }
+  .section-hdr { break-after: avoid; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Cover ────────────────────────────────────────────────────────────── -->
+<div class="cover">
+  <div class="cover-inner">
+    <div class="cover-left">
+      <div class="brand-row">
+        <img class="brand-logo" src="{{ logo_uri }}" alt="Soun Al Hosn">
+        <span class="brand-name">Soun Al Hosn Cybersecurity LLC · Dubai, UAE</span>
+      </div>
+      <div class="cover-eyebrow">Confidential — Network Security Assessment</div>
+      <h1>Security Risk<br><em>Assessment Report</em></h1>
+      <div class="cover-tagline">Network Exposure · Email Security · SSL/TLS Analysis · Remediation Roadmap</div>
+      <div class="cover-meta">
+        <div class="meta-item"><label>Prepared For</label><span>{{ r.client_name }}</span></div>
+        <div class="meta-item"><label>Network Scope</label><span>{{ r.target }}</span></div>
+        <div class="meta-item"><label>Assessment Date</label><span>{{ r.generated_at }}</span></div>
+        <div class="meta-item"><label>Scan Depth</label><span>{{ r.scan_profile | capitalize }}</span></div>
+        <div class="meta-item"><label>Prepared By</label><span>{{ r.operator }}</span></div>
+      </div>
+    </div>
+
+    <div class="risk-block">
+      <span class="risk-block-lbl">Overall Risk Rating</span>
+      <span class="risk-name" style="color: {{ r.overall_risk_color }}">{{ r.overall_risk_label }}</span>
+      <div class="risk-score-bar">
+        <div class="risk-score-fill" style="width: {{ r.risk_score }}%; background: {{ r.overall_risk_color }};"></div>
+      </div>
+      <div class="risk-score-num">Risk Score: {{ r.risk_score }}/100 — {{ r.risk_score_label }}</div>
+      <div class="risk-findings">
+        {% if r.total_findings > 0 %}
+        <strong>{{ r.total_findings }}</strong> finding{{ 's' if r.total_findings != 1 }}
+        {% if r.critical_count > 0 %} · <span style="color:var(--c-crit)"><strong>{{ r.critical_count }}</strong> Critical</span>{% endif %}
+        {% if r.high_count > 0 %} · <span style="color:var(--c-high)"><strong>{{ r.high_count }}</strong> High</span>{% endif %}
+        {% if r.medium_count > 0 %} · <span style="color:var(--c-med)"><strong>{{ r.medium_count }}</strong> Medium</span>{% endif %}
+        {% else %}
+        No significant findings
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Content ───────────────────────────────────────────────────────────── -->
+<div class="content">
+
+  <!-- Summary cards -->
+  <div class="summary-grid">
+    <div class="stat-card neutral">
+      <div class="stat-num neutral">{{ r.hosts_up }}</div>
+      <div class="stat-lbl">Hosts Discovered</div>
+    </div>
+    <div class="stat-card neutral">
+      <div class="stat-num neutral">{{ r.total_open_ports }}</div>
+      <div class="stat-lbl">Open Services</div>
+    </div>
+    <div class="stat-card critical">
+      <div class="stat-num {% if r.critical_count > 0 %}critical{% else %}safe{% endif %}">{{ r.critical_count }}</div>
+      <div class="stat-lbl">Critical Risks</div>
+    </div>
+    <div class="stat-card high">
+      <div class="stat-num {% if r.high_count > 0 %}high{% else %}safe{% endif %}">{{ r.high_count }}</div>
+      <div class="stat-lbl">High Risks</div>
+    </div>
+    <div class="stat-card medium">
+      <div class="stat-num {% if r.medium_count > 0 %}medium{% else %}safe{% endif %}">{{ r.medium_count }}</div>
+      <div class="stat-lbl">Medium Risks</div>
+    </div>
+  </div>
+
+  <!-- Executive Summary -->
+  {% if r.executive_summary %}
+  <div class="section">
+    <div class="section-hdr">
+      <div class="section-hdr-icon" style="background:#0b1a2e;color:#38bdf8;"></div>
+      <h2>Executive Summary</h2>
+    </div>
+    <div class="exec-card">{{ r.executive_summary }}</div>
+  </div>
+  {% endif %}
+
+  <!-- Perimeter / Internet Exposure -->
+  {% if r.has_netinfo %}
+  <div class="section">
+    <div class="section-hdr">
+      <div class="section-hdr-icon" style="background:#1a0a2e;color:#a78bfa;"></div>
+      <h2>Internet Perimeter & ISP Exposure</h2>
+    </div>
+    <div class="perimeter-card">
+      <div class="perimeter-grid">
+        <div class="peri-item">
+          <label>Public IP Address</label>
+          <div class="v cyan mono">{{ r.netinfo.public_ip }}</div>
+        </div>
+        <div class="peri-item">
+          <label>Internet Provider (ISP)</label>
+          <div class="v">{{ r.netinfo.isp }}</div>
+        </div>
+        <div class="peri-item">
+          <label>Autonomous System (ASN)</label>
+          <div class="v mono">{{ r.netinfo.asn }}</div>
+        </div>
+        <div class="peri-item">
+          <label>Geolocation</label>
+          <div class="v">{{ r.netinfo.city }}, {{ r.netinfo.country }}</div>
+        </div>
+      </div>
+    </div>
+
+    {% if r.has_topology %}
+    <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin:1.5rem 0 0.75rem;">
+      ▸ Network Path — Client LAN to Internet Edge
+    </div>
+    <div class="perimeter-card">
+      <div class="path-flow">
+        {% for hop in r.topology.hops %}
+        <div class="hop">
+          <div class="hop-num">hop {{ hop.number }}</div>
+          {% if hop.is_timeout %}
+          <div class="hop-node timeout">?</div>
+          <div class="hop-info"><div class="hop-ip dim">* * * (no response — filtered/ICMP-blocked)</div></div>
+          <div class="hop-role timeout">Hidden</div>
+          {% else %}
+          {% set ntype = 'gateway' if hop.role == 'Local Gateway' else ('isp' if not hop.is_private else 'internal') %}
+          <div class="hop-node {{ ntype }}">{{ '◆' if ntype=='gateway' else ('▲' if ntype=='isp' else '●') }}</div>
+          <div class="hop-info">
+            <div class="hop-ip">{{ hop.ip }}{% if hop.hostname %} <span style="color:var(--muted);font-size:0.72rem;">({{ hop.hostname }})</span>{% endif %}</div>
+            <div class="hop-meta">
+              {{ '%.1f'|format(hop.rtt_ms) }} ms
+              {% if hop.isp %} · {{ hop.isp }}{% endif %}
+              {% if hop.asn %} · <span class="asn">{{ hop.asn.split(' ')[0] }}</span>{% endif %}
+              {% if hop.city %} · {{ hop.city }}, {{ hop.country }}{% endif %}
+            </div>
+          </div>
+          <div class="hop-role {{ ntype }}">{{ hop.role }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div style="font-size:0.72rem;color:var(--muted);margin-top:0.5rem;line-height:1.6;">
+      This map traces the route from the client's internal network through the local gateway and any
+      intermediate hops out to the ISP edge ({{ r.netinfo.isp }}). It shows the perimeter an attacker on the
+      internet must cross to reach this network — and conversely, the path this network's traffic takes to the outside world.
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- Attack Path Analysis -->
+  {% if r.attack_paths %}
+  <div class="section">
+    <div class="section-hdr">
+      <div class="section-hdr-icon" style="background:#1a0808;color:#f87171;"></div>
+      <h2>Attack Path Analysis</h2>
+      <span class="section-count">{{ r.attack_paths|length }} scenario{{ 's' if r.attack_paths|length != 1 }}</span>
+    </div>
+    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;line-height:1.6;">
+      These scenarios translate the technical findings into the real-world attacks they enable.
+      Each describes how an attacker would chain the exposure into business impact — and how to stop it.
+    </div>
+    {% for path in r.attack_paths %}
+    {% set label = path.split('—')[0].strip() %}
+    {% set body = path.split('—', 1)[1].strip() if '—' in path else path %}
+    <div class="attack-card">
+      <div class="attack-label">{{ label }}</div>
+      <div class="attack-text">
+        {% if 'Mitigation:' in body %}
+        {{ body.split('Mitigation:')[0].strip() }}
+        <span class="mit">→ Mitigation: {{ body.split('Mitigation:')[1].strip() }}</span>
+        {% else %}{{ body }}{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Security Findings -->
+  <div class="section">
+    <div class="section-hdr">
+      <div class="section-hdr-icon" style="background:#1c0a0a;color:#f87171;"></div>
+      <h2>Security Findings</h2>
+      {% if r.findings %}
+      <span class="section-count">{{ r.total_findings }} finding{{ 's' if r.total_findings != 1 }}</span>
+      {% endif %}
+    </div>
+
+    {% if not r.findings %}
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:2rem;text-align:center;color:var(--muted);font-size:0.875rem;">
+      ✓ No significant risks detected.
+      {% if not r.has_scan_data %} (Scan returned no hosts — verify the subnet and try again.){% endif %}
+    </div>
+    {% else %}
+    {% for f in r.findings %}
+    <div class="finding {{ f.risk }}" id="f-{{ loop.index }}">
+      <div class="finding-head" onclick="toggleFinding({{ loop.index }})">
+        <span class="risk-pill {{ f.risk }}">{{ f.risk_label }}</span>
+        <div class="finding-main">
+          <div class="finding-title">{{ f.title }}</div>
+          <div style="margin-top:0.3rem;">
+            <span class="finding-host">
+              {{ f.host }}{% if f.port %}<span class="finding-port">:{{ f.port }}</span>{% endif %}
+              {% if f.service %} · {{ f.service }}{% endif %}
+            </span>
+            {% if f.has_cves %}
+            <span style="margin-left:0.5rem;font-size:0.68rem;background:#1c0a0a;color:#f87171;border:1px solid #7f1d1d;border-radius:3px;padding:1px 5px;">{{ f.cves|length }} CVE{{ 's' if f.cves|length != 1 }}</span>
+            {% endif %}
+          </div>
+        </div>
+        <span class="finding-toggle" id="toggle-{{ loop.index }}">▼</span>
+      </div>
+      <div class="finding-body open" id="body-{{ loop.index }}">
+        <p class="finding-detail">{{ f.detail }}</p>
+        {% if f.recommendation %}
+        <div class="rec-box">
+          <span class="rec-label">→ Recommended Action</span>
+          {{ f.recommendation }}
+        </div>
+        {% endif %}
+        {% if f.has_cves %}
+        <div class="cve-list">
+          <div class="cve-list-hdr">Known CVEs — NIST National Vulnerability Database</div>
+          {% for cve in f.cves %}
+          <div class="cve-row">
+            <span class="cve-id"><a href="{{ cve.url }}" target="_blank">{{ cve.cve_id }}</a></span>
+            <span class="cve-score {{ cve.risk }}">{{ cve.cvss_score }}</span>
+            <span class="cve-sev">
+              <span class="risk-pill {{ cve.risk }}" style="font-size:0.6rem;padding:1px 4px;">{{ cve.severity }}</span>
+            </span>
+            <span class="cve-desc">{{ cve.description }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+
+  <!-- Asset Inventory -->
+  {% if r.host_rows %}
+  <div class="section">
+    <div class="section-hdr">
+      <div class="section-hdr-icon" style="background:#0a1829;color:#0ea5e9;"></div>
+      <h2>Asset Inventory — Discovered Endpoints</h2>
+      <span class="section-count">{{ r.host_rows | length }} device{{ 's' if r.host_rows|length != 1 }}</span>
+    </div>
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Device Type</th>
+            <th>IP Address</th>
+            <th>Hostname</th>
+            <th>OS / Vendor</th>
+            <th>MAC</th>
+            <th>Open Ports</th>
+            <th>Risk</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for h in r.host_rows %}
+          <tr class="asset-row">
+            <td>
+              <div class="dev-cell">
+                <span class="dev-type">{{ h.device_type }}{% if h.is_gateway %}<span class="dev-gw-tag">GW</span>{% endif %}</span>
+              </div>
+            </td>
+            <td class="td-ip">{{ h.ip }}</td>
+            <td class="td-hn">{{ h.hostname or '—' }}</td>
+            <td class="td-os">{{ h.os or h.vendor or '—' }}</td>
+            <td class="td-vendor" style="font-family:monospace;font-size:0.7rem;">{{ h.mac[:8] ~ '…' if h.mac else '—' }}</td>
+            <td class="td-ports">{{ h.ports or '—' }}</td>
+            <td><span class="risk-pill {{ h.risk }}">{{ h.risk_label }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Email & DNS Security -->
+  {% if r.domain and r.domain != 'N/A' %}
+  <div class="section">
+    <div class="section-hdr">
+      <div class="section-hdr-icon" style="background:#0a1e0e;color:#10b981;"></div>
+      <h2>Email Security — {{ r.domain }}</h2>
+    </div>
+    {% if r.dns_error %}
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1.5rem;color:var(--muted);font-size:0.875rem;">
+      DNS check could not complete: {{ r.dns_error }}
+    </div>
+    {% elif r.dns_checks %}
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Check</th><th>Status</th><th>Detail & Recommendation</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in r.dns_checks %}
+          <tr>
+            <td style="font-weight:700;color:#e2e8f0;white-space:nowrap;">{{ c.name }}</td>
+            <td style="white-space:nowrap;">
+              <span class="status-dot">
+                <span class="sdot {{ c.status }}"></span>
+                {{ c.status | capitalize }}
+              </span>
+            </td>
+            <td>
+              <div style="color:#94a3b8;font-size:0.8rem;line-height:1.5;">{{ c.detail }}</div>
+              {% if c.recommendation %}
+              <div style="margin-top:0.4rem;color:#38bdf8;font-size:0.77rem;">→ {{ c.recommendation }}</div>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- SSL/TLS Analysis -->
+  {% if r.has_ssl_data %}
+  <div class="section">
+    <div class="section-hdr">
+      <div class="section-hdr-icon" style="background:#1a0a1e;color:#a78bfa;"></div>
+      <h2>SSL / TLS Analysis</h2>
+    </div>
+    {% for ssl_res in r.ssl_results %}
+    {% if ssl_res.findings %}
+    {% for f in ssl_res.findings %}
+    <div class="ssl-finding">
+      <span class="ssl-host-chip">{{ ssl_res.host }}:{{ ssl_res.port }}</span>
+      <div class="ssl-finding-body">
+        <div class="ssl-finding-name">
+          <span class="risk-pill {{ f.risk }}" style="margin-right:0.4rem;">{{ f.risk | upper }}</span>
+          {{ f.name }}
+        </div>
+        <div class="ssl-finding-detail">{{ f.detail }}</div>
+        {% if f.recommendation %}
+        <div style="margin-top:0.5rem;font-size:0.77rem;color:#38bdf8;">→ {{ f.recommendation }}</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;font-size:0.82rem;color:var(--muted);">
+      ✓ {{ ssl_res.host }}:{{ ssl_res.port }} — SSL/TLS configuration looks good.
+      {% if ssl_res.cert_expiry %} Certificate expires {{ ssl_res.cert_expiry }}.{% endif %}
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Re-scan diff (proof of fix) -->
+  {% if r.has_diff %}
+  <div class="section">
+    <div class="section-hdr">
+      <div class="section-hdr-icon" style="background:#052e16;color:#34d399;"></div>
+      <h2>Re-Assessment — Proof of Remediation</h2>
+    </div>
+    <div class="diff-rate">
+      <div class="diff-rate-num">{{ r.scan_diff.remediation_rate }}%</div>
+      <div class="diff-rate-lbl">of previously identified issues have been remediated</div>
+    </div>
+    <div class="diff-grid">
+      <div class="diff-card"><div class="diff-num fixed">{{ r.scan_diff.fixed_count }}</div><div class="diff-lbl">Fixed</div></div>
+      <div class="diff-card"><div class="diff-num open">{{ r.scan_diff.still_open|length }}</div><div class="diff-lbl">Still Open</div></div>
+      <div class="diff-card"><div class="diff-num new">{{ r.scan_diff.new|length }}</div><div class="diff-lbl">Newly Found</div></div>
+    </div>
+    {% if r.scan_diff.fixed %}
+    <div style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin:1rem 0 0.5rem;">✓ Resolved Since Last Assessment</div>
+    {% for f in r.scan_diff.fixed %}
+    <div style="font-size:0.8rem;color:#34d399;padding:0.3rem 0;border-bottom:1px solid #0d1525;">✓ {{ f.title }} <span style="color:var(--muted);">— {{ f.host }}</span></div>
+    {% endfor %}
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- Active Validation Agent -->
+  {% if r.has_validation %}
+  <div class="section">
+    <div class="section-hdr">
+      <div class="section-hdr-icon" style="background:#1a0808;color:#f87171;"></div>
+      <h2>Active Validation — Lateral Movement Analysis</h2>
+    </div>
+    <div class="agent-banner">
+      <div class="agent-stat">
+        <div class="agent-stat-num">{{ r.validation.lateral_paths }}</div>
+        <div class="agent-stat-lbl">Reachable Attack Paths</div>
+      </div>
+      <div class="agent-desc">
+        The validation agent actively tested reachability to dangerous services across all discovered hosts.
+        <strong style="color:#f87171;">{{ r.validation.lateral_paths }} lateral-movement paths</strong> were confirmed reachable —
+        each is a route an attacker could use to pivot from one compromised machine to another.
+      </div>
+    </div>
+    {% if r.validation.reachable_edges %}
+    <div class="data-table-wrap">
+      <table class="reach-table">
+        <thead><tr><th>Target Host</th><th>Reachable Service</th><th>Port</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for e in r.validation.reachable_edges %}
+          <tr>
+            <td class="reach-dst">{{ e.dst }}</td>
+            <td class="reach-svc">{{ e.service }}</td>
+            <td style="font-family:monospace;color:var(--muted);">{{ e.port }}</td>
+            <td class="reach-yes">● REACHABLE</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- Web / Admin Panels -->
+  {% if r.has_web_data %}
+  <div class="section">
+    <div class="section-hdr">
+      <div class="section-hdr-icon" style="background:#1a0a2e;color:#a78bfa;"></div>
+      <h2>Exposed Web Services &amp; Admin Panels</h2>
+      <span class="section-count">{{ r.web_results|length }}</span>
+    </div>
+    {% for wf in r.web_results %}
+    <div class="panel-card">
+      {% if wf.panel_type %}<span class="panel-type-chip">{{ wf.panel_type }}</span>{% else %}<span class="panel-type-chip" style="background:#0a1828;color:#60a5fa;border-color:#1e3a5f;">Web Service</span>{% endif %}
+      <div class="panel-info">
+        <div class="panel-url">{{ wf.url }}</div>
+        {% if wf.title %}<div class="panel-title-txt">{{ wf.title }}</div>{% endif %}
+        {% if wf.server %}<div class="panel-server">Server: {{ wf.server }}</div>{% endif %}
+        {% for f in wf.findings %}
+        <div style="margin-top:0.4rem;font-size:0.76rem;">
+          <span class="risk-pill {{ f.risk }}" style="font-size:0.6rem;padding:1px 5px;">{{ f.risk|upper }}</span>
+          <span style="color:#cbd5e1;">{{ f.title }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Compliance Gaps -->
+  {% if r.has_compliance %}
+  <div class="section">
+    <div class="section-hdr">
+      <div class="section-hdr-icon" style="background:#0a1e2e;color:#38bdf8;"></div>
+      <h2>Compliance Gap Analysis</h2>
+      <span class="section-count">{{ r.compliance.gap_count }} control gap{{ 's' if r.compliance.gap_count != 1 }}</span>
+    </div>
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.875rem;line-height:1.5;">
+      Findings mapped to UAE Information Assurance (NESA), ISO/IEC 27001:2022, and PCI-DSS v4.0 controls.
+    </div>
+    <div class="data-table-wrap">
+      <table class="compliance-table">
+        <thead>
+          <tr><th>Control / Requirement</th><th>UAE NESA</th><th>ISO 27001</th><th>PCI-DSS</th><th>Risk</th></tr>
+        </thead>
+        <tbody>
+          {% for g in r.compliance.gaps %}
+          <tr>
+            <td>
+              <div class="ctrl-name">{{ g.control_name }}</div>
+              <div class="ctrl-findings">{{ g.findings|length }} related finding{{ 's' if g.findings|length != 1 }}</div>
+            </td>
+            <td class="fw-chip">{{ g.nesa }}</td>
+            <td class="fw-chip">{{ g.iso27001 }}</td>
+            <td class="fw-chip">{{ g.pci }}</td>
+            <td><span class="risk-pill {{ g.risk }}">{{ g.risk|capitalize }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Engineer Field Assessment -->
+  {% if r.has_engineer_data %}
+  <div class="section">
+    <div class="section-hdr">
+      <div class="section-hdr-icon" style="background:#0a1e0e;color:#34d399;"></div>
+      <h2>Field Assessment — Engineer On-Site Review</h2>
+    </div>
+    {% for mr in r.engineer_results %}
+    <div class="field-module">
+      <div class="field-module-hdr">{{ mr.icon }} {{ mr.title }}</div>
+      {% for f in mr.findings %}
+      <div class="finding {{ f.risk }}" style="margin-bottom:0.4rem;">
+        <div class="finding-head" style="cursor:default;">
+          <span class="risk-pill {{ f.risk }}">{{ f.risk|capitalize }}</span>
+          <div class="finding-main">
+            <div class="finding-title">{{ f.title }}</div>
+            <p class="finding-detail" style="margin-top:0.3rem;">{{ f.detail }}</p>
+            <div class="rec-box" style="margin-top:0.4rem;"><span class="rec-label">→ Fix</span>{{ f.recommendation }}</div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+      {% if mr.notes %}<div class="field-notes">Engineer notes: {{ mr.notes }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Remediation Runbook -->
+  {% if r.has_runbook %}
+  <div class="section">
+    <div class="section-hdr">
+      <div class="section-hdr-icon" style="background:#1a1005;color:#fbbf24;"></div>
+      <h2>Remediation Runbook — Prioritised Action Plan</h2>
+      <span class="section-count">{{ r.runbook_steps|length }} step{{ 's' if r.runbook_steps|length != 1 }}</span>
+    </div>
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.875rem;line-height:1.5;">
+      Work top to bottom — items are ordered by risk. Effort estimates assume standard SME infrastructure.
+      Soun Al Hosn can execute this entire runbook as a fixed-scope remediation project.
+    </div>
+    {% for s in r.runbook_steps %}
+    <div class="runbook-step {{ s.risk }}">
+      <div class="rb-num">{{ s.order }}</div>
+      <div class="rb-body">
+        <div class="rb-title">
+          <span class="risk-pill {{ s.risk }}" style="font-size:0.58rem;padding:1px 4px;margin-right:0.4rem;">{{ s.risk|upper }}</span>
+          {{ s.title }}{% if s.host %} <span style="color:var(--muted);font-family:monospace;font-size:0.72rem;">({{ s.host }}{% if s.port %}:{{ s.port }}{% endif %})</span>{% endif %}
+        </div>
+        <div class="rb-action">{{ s.action }}</div>
+      </div>
+      <div class="rb-effort">
+        <div class="rb-effort-time">{{ s.effort }}</div>
+        <div class="rb-effort-note">{{ s.effort_note }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Engineer Notes (private) -->
+  {% if r.engineer_notes %}
+  <div class="section">
+    <div class="section-hdr">
+      <div class="section-hdr-icon" style="background:#0a0f1e;color:#374151;"></div>
+      <h2>Engineer Follow-Up Notes</h2>
+      <span class="section-count" style="color:#374151;">Private — Not for Client</span>
+    </div>
+    <div class="eng-notes-wrap">
+      <div class="eng-notes-hdr">
+        Internal Analyst Notes — Do Not Share With Client
+      </div>
+      {% for note in r.engineer_notes %}
+      <div class="eng-note">
+        {% set parts = note.split(':') %}
+        <span class="note-tag">{{ parts[0] }}:</span>{{ note[note.index(':')+1:] }}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Scope -->
+  <div class="scope-note">
+    <strong>Assessment Scope:</strong>
+    This report covers network-layer exposure (open ports and services), email security configuration, and SSL/TLS certificate analysis.
+    It does not perform authenticated endpoint access, exploit vulnerabilities, or assess application-layer security.
+    All checks are read-only and non-destructive.
+    Scan command: <code style="font-family:monospace;color:#374151;font-size:0.72rem;">{{ r.scan_command }}</code>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-box">
+    <h2>Ready to Fix These Findings?</h2>
+    <p>
+      Soun Al Hosn can remediate every issue in this report — firewall hardening, SMB lockdown,
+      RDP restriction, email security configuration, SSL renewal, and more.
+      Contact us for a scoped remediation proposal with fixed pricing.
+    </p>
+    <div class="cta-contacts">
+      <div class="cta-contact"><span class="icon">Email</span>info@sounalhosn.ae</div>
+      <div class="cta-contact"><span class="icon">Phone</span>+971 52 203 4204</div>
+      <div class="cta-contact"><span class="icon">Web</span>sounalhosn.ae</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Disclaimer -->
+<div class="disclaimer">
+  <strong>Disclaimer:</strong>
+  This assessment report was prepared by Soun Al Hosn Cybersecurity LLC as part of an authorised security assessment.
+  All scanning was conducted with prior permission on the defined scope only.
+  This is a point-in-time assessment — the security posture of the network may change at any time.
+  Findings should be validated by a qualified security engineer before remediation work begins.
+  This report is confidential and intended solely for the named recipient.
+  &nbsp;·&nbsp; © {{ r.generated_at.split(',')[0].split(' ')[-1] }} Soun Al Hosn Cybersecurity LLC · Dubai, UAE · TRN: sounalhosn.ae
+</div>
+
+<script>
+function toggleFinding(idx) {
+  const body = document.getElementById('body-' + idx);
+  const toggle = document.getElementById('toggle-' + idx);
+  const isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  toggle.classList.toggle('open', !isOpen);
+}
+// All findings open by default on load — collapse on print only handled by CSS
+</script>
+</body>
+</html>
