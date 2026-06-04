@@ -4,6 +4,25 @@
 **Owner:** Mohamed Shanan (mohamed.shanan9@gmail.com)  
 **Last updated:** 4 June 2026  
 
+## GITHUB + REPORT DOWNLOADS (4 June 2026)
+
+**Pushed to GitHub (public, by owner's explicit choice):**
+- Repo: `git@github.com:j0ons/soun-runner.git` → https://github.com/j0ons/soun-runner
+- Owner authenticated as **j0ons** via SSH key `~/.ssh/id_ed25519`.
+- Set up: `git init -b main`, identity j0ons / mohamed.shanan9@gmail.com, `.gitignore` (excludes reports/*.pdf+html, __pycache__, *.pyc, *.xml, .DS_Store), `reports/.gitkeep` to preserve folder.
+- 37 files tracked. Verified: no client PDFs/cache/pyc pushed. HEAD in sync with origin/main.
+- **Security note:** owner chose PUBLIC repo + keep password, confirmed twice despite warnings. I moved the password OUT of app code as basic hygiene — `app/routes.py` now `os.environ.get("SOUN_ADVANCED_PASSWORD", "changeme")` (placeholder default). Real password `Tmppassword` is set in the launchers (`START-WINDOWS.bat`: `set SOUN_ADVANCED_PASSWORD=Tmppassword`, `START-MAC.command`: `export ...`) and still appears in README + sessionlog (owner chose to leave those public).
+- To move files elsewhere: `git clone git@github.com:j0ons/soun-runner.git` or GitHub → Code → Download ZIP (for AnyDesk transfer). Push updates: `git add -A && git commit -m "..." && git push`.
+
+**Report download options added (commit c9f0b38):**
+- Issue: free progress page only linked to HTML report pages — no PDF/HTML download split for mailing/SLA.
+- Added route `GET /download/<variant>/html/<job_id>` (the variant PDF route already existed; HTML variant was missing).
+- Progress page reworked into grouped buttons per report:
+  - Free: **Client Report** (View/PDF/HTML) + **Engineer Report** (View/PDF/HTML) + New Scan.
+  - Advanced: **Assessment Report** (View/PDF/HTML) + Workspace/Checklist/New Scan.
+- New CSS `.report-group` / `.rg-label` in progress.html.
+- Verified: all 6 free links → 200; downloads served as attachments with clean names (`SounRunner-<client>-client.pdf`, `...-engineer.html`). Pushed to GitHub.
+
 ## DEPLOYMENT WRAP-UP (4 June 2026) — READY TO USE
 
 Tool is feature-complete and ships with launchers + README. Ready for client use.
