@@ -9,8 +9,11 @@ from pathlib import Path
 # Ensure project root is on the path
 sys.path.insert(0, str(Path(__file__).parent))
 
-# macOS: WeasyPrint needs Homebrew's pango/cairo. Set before any import that
-# might trigger the weasyprint C-extension load.
+# PDF engine: Soun Runner renders reports to PDF via headless Chromium
+# (Playwright) by default — portable, no system libraries required. WeasyPrint
+# is a fallback for setups that already have it. The line below only helps the
+# WeasyPrint fallback on macOS, where it needs Homebrew's pango/cairo. It is
+# harmless on machines that use Chromium.
 if sys.platform == "darwin":
     _brew_lib = "/opt/homebrew/lib"
     existing = os.environ.get("DYLD_LIBRARY_PATH", "")
@@ -32,11 +35,18 @@ def open_browser():
 if __name__ == "__main__":
     app = create_app()
 
+    from app.modules.pdf import engine_name
+    _pdf_engine = engine_name()
+
     print("=" * 52)
     print("  Soun Runner v2 — Network Assessment Tool")
     print("  Soun Al Hosn Cybersecurity LLC")
     print("=" * 52)
     print(f"  Open your browser at: http://{HOST}:{PORT}")
+    print(f"  PDF engine: {_pdf_engine}")
+    if _pdf_engine == "none":
+        print("  (No PDF engine — reports will be HTML only.)")
+        print("  Fix: pip install playwright && playwright install chromium")
     print("  Press Ctrl+C to stop.")
     print("=" * 52)
 

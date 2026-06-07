@@ -280,20 +280,19 @@ def _run_free_job(job_id: str, app) -> None:
         log(f"    → {free.total_findings} exposed-service finding(s)")
 
         # Generate BOTH variants: client (plain language) + engineer (fix steps)
-        from weasyprint import HTML as WP
+        from app.modules.pdf import render_pdf
         for variant in ("client", "engineer"):
             with app.app_context():
                 html_content = render_template("free_report.html", r=free, variant=variant)
             html_path = _REPORTS_DIR / f"{job_id}_{variant}.html"
             html_path.write_text(html_content, encoding="utf-8")
             job[f"report_html_{variant}"] = str(html_path)
-            try:
-                pdf_path = _REPORTS_DIR / f"{job_id}_{variant}.pdf"
-                WP(string=html_content).write_pdf(str(pdf_path))
+            pdf_path = _REPORTS_DIR / f"{job_id}_{variant}.pdf"
+            if render_pdf(html_content, pdf_path):
                 job[f"report_pdf_{variant}"] = str(pdf_path)
                 log(f"    → {variant} report PDF generated")
-            except Exception as pdf_err:
-                log(f"    {variant} PDF skipped: {pdf_err}")
+            else:
+                log(f"    {variant} PDF skipped (no PDF engine available — HTML report still works)")
 
         # default report links point to the client report
         job["report_html"] = job.get("report_html_client")
@@ -408,13 +407,10 @@ def _rebuild_with_engineer(job_id: str, app) -> None:
         html_path = _REPORTS_DIR / f"{job_id}.html"
         html_path.write_text(html_content, encoding="utf-8")
         job["report_html"] = str(html_path)
-        try:
-            from weasyprint import HTML as WP
-            pdf_path = _REPORTS_DIR / f"{job_id}.pdf"
-            WP(string=html_content).write_pdf(str(pdf_path))
+        from app.modules.pdf import render_pdf
+        pdf_path = _REPORTS_DIR / f"{job_id}.pdf"
+        if render_pdf(html_content, pdf_path):
             job["report_pdf"] = str(pdf_path)
-        except Exception:
-            pass
         job["stats"]["findings"] = cached.total_findings
         job["stats"]["critical"] = cached.critical_count
         job["log"].append(f"{_ts()}  [*] Report updated with field assessment.")
@@ -825,14 +821,13 @@ def _run_job(job_id: str, app) -> None:
         job["report_html"] = str(html_path)
 
         # ── 7. PDF ────────────────────────────────────────────────────────────
-        try:
-            from weasyprint import HTML as WP
-            pdf_path = _REPORTS_DIR / f"{job_id}.pdf"
-            WP(string=html_content).write_pdf(str(pdf_path))
+        from app.modules.pdf import render_pdf
+        pdf_path = _REPORTS_DIR / f"{job_id}.pdf"
+        if render_pdf(html_content, pdf_path):
             job["report_pdf"] = str(pdf_path)
             log("    → PDF report generated")
-        except Exception as pdf_err:
-            log(f"    PDF skipped: {pdf_err}")
+        else:
+            log("    PDF skipped (no PDF engine available — HTML report still works)")
 
         log("")
         log("╚══ ASSESSMENT COMPLETE ══╝")
