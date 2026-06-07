@@ -523,6 +523,34 @@ def job_status(job_id: str):
     })
 
 
+@bp.post("/wipe/<job_id>")
+def wipe_app(job_id: str):
+    """Private-tool self-destruct: save reports, delete the app, shut down.
+
+    Exports all reports to a safe folder on the Desktop (verified), then
+    schedules removal of the app (the frozen .exe, or the source tree) and shuts
+    the server down. If the export fails, nothing is deleted.
+    """
+    from app.modules.selfwipe import wipe as _do_wipe
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    result = _do_wipe(_REPORTS_DIR, stamp)
+
+    if not result.get("ok"):
+        # Export/cleanup failed — report it, do NOT shut down.
+        return jsonify(result), 500
+
+    # Success: respond, then exit the process shortly after so the response
+    # reaches the browser first. os._exit avoids Flask reloader/atexit hooks.
+    def _shutdown():
+        import time
+        time.sleep(1.5)
+        os._exit(0)
+
+    threading.Thread(target=_shutdown, daemon=True).start()
+    return jsonify(result)
+
+
 # ── Report ────────────────────────────────────────────────────────────────────
 
 @bp.get("/report/<job_id>")

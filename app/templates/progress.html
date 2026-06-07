@@ -96,6 +96,9 @@ body::after { content:''; position:fixed; inset:0; pointer-events:none;
 .btn:hover { color: var(--txt); border-color: #2a3e52; }
 .btn-go { background: linear-gradient(180deg,#0e9e57,#0a7a43); border-color: #14b566; color: #021109; box-shadow: 0 0 16px rgba(45,212,127,0.25); }
 .btn-go:hover { color: #021109; box-shadow: 0 0 24px rgba(45,212,127,0.4); }
+.btn-danger { border-color: #5a2230; color: #ff6b6b; background: #1a0c10; }
+.btn-danger:hover { color: #fff; background: linear-gradient(180deg,#c0392b,#8e2820); border-color: #ff4d4d; box-shadow: 0 0 18px rgba(255,77,77,0.35); }
+.wipe-note { font-family: var(--mono); font-size: 0.66rem; color: var(--dim); margin-top: 0.5rem; width:100%; }
 </style>
 </head>
 <body>
@@ -179,6 +182,12 @@ body::after { content:''; position:fixed; inset:0; pointer-events:none;
       <a class="btn" href="/advanced">+ New Scan</a>
     </div>
     {% endif %}
+    <div class="report-group">
+      <button class="btn btn-danger" id="wipeBtn" onclick="wipeApp()">Finish &amp; Wipe</button>
+    </div>
+    <div class="wipe-note">
+      Private tool — "Finish &amp; Wipe" saves your reports to the Desktop, then removes SounRunner from this machine.
+    </div>
   </div>
 </div>
 
@@ -254,6 +263,52 @@ function doPoll() {
 
 poll = setInterval(doPoll, 1200);
 doPoll();
+
+function wipeApp() {
+  const ok = confirm(
+    "Finish & Wipe\n\n" +
+    "This will:\n" +
+    "  • SAVE your reports to a folder on the Desktop\n" +
+    "  • DELETE SounRunner and all its working files from this machine\n" +
+    "  • Shut down the app\n\n" +
+    "Make sure your scan is finished. Continue?"
+  );
+  if (!ok) return;
+
+  const btn = document.getElementById('wipeBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving reports & wiping…';
+
+  fetch('/wipe/' + jobId, { method: 'POST' })
+    .then(r => r.json().then(data => ({ ok: r.ok, data })))
+    .then(({ ok, data }) => {
+      if (!ok || !data.ok) {
+        btn.disabled = false;
+        btn.textContent = 'Finish & Wipe';
+        alert('Wipe aborted — nothing was deleted.\n\n' + (data.message || 'Unknown error'));
+        return;
+      }
+      // Success — server is shutting down. Show a final message.
+      document.body.innerHTML =
+        '<div style="font-family:monospace;color:#cfe;background:#000e11;' +
+        'min-height:100vh;display:flex;align-items:center;justify-content:center;' +
+        'text-align:center;padding:2rem;">' +
+        '<div><h2 style="color:#2dd47f;">Done.</h2>' +
+        '<p>' + (data.message || '') + '</p>' +
+        '<p style="color:#8aa;">You can close this window. SounRunner has been removed.</p>' +
+        '</div></div>';
+    })
+    .catch(() => {
+      // The server may have already exited (expected on success path).
+      document.body.innerHTML =
+        '<div style="font-family:monospace;color:#cfe;background:#000e11;' +
+        'min-height:100vh;display:flex;align-items:center;justify-content:center;' +
+        'text-align:center;padding:2rem;">' +
+        '<div><h2 style="color:#2dd47f;">Done.</h2>' +
+        '<p>Reports saved to the Desktop. SounRunner has been removed.</p>' +
+        '<p style="color:#8aa;">You can close this window.</p></div></div>';
+    });
+}
 </script>
 </body>
 </html>

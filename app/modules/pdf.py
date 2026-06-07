@@ -74,29 +74,31 @@ def _bundle_dir() -> Path | None:
 
 
 def _prepare_chromium_env() -> None:
-    """Point Playwright at a bundled Chromium when frozen.
+    """Point Playwright at the bundled Chromium when frozen.
 
     During normal `python main.py` use, Playwright finds the browser it
-    downloaded via `playwright install chromium` automatically. When packaged
-    into an EXE there is no such download on the target machine, so we ship the
-    browser inside the bundle (under a `ms-playwright` folder) and tell
-    Playwright where it is via PLAYWRIGHT_BROWSERS_PATH.
+    downloaded via `playwright install chromium` automatically — do nothing.
 
-    Bundling step (done at build time, documented in BUILD-EXE notes):
-        1. `playwright install chromium`
-        2. copy the resolved browsers dir into the build as `ms-playwright/`
-        3. add it to the PyInstaller datas so it lands next to the EXE.
+    For the EXE we build with PLAYWRIGHT_BROWSERS_PATH=0, which installs Chromium
+    *inside* the playwright package (under driver/package/.local-browsers).
+    PyInstaller bundles that folder, so at runtime we just point
+    PLAYWRIGHT_BROWSERS_PATH at it inside _MEIPASS. We also accept a side-by-side
+    `ms-playwright` folder next to the EXE as a fallback layout.
     """
+    if not _is_frozen():
+        return  # source run: let Playwright use its normal cache.
     if os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
-        return  # operator/build already configured it — respect that.
+        return  # already configured (e.g. by the operator) — respect it.
 
-    candidates: list[Path] = []
     bundle = _bundle_dir()
+    candidates: list[Path] = []
     if bundle:
+        # Primary: browser bundled inside the playwright package (BROWSERS_PATH=0 build).
+        candidates.append(bundle / "playwright" / "driver" / "package" / ".local-browsers")
+        # Fallback: a separate ms-playwright folder inside the bundle.
         candidates.append(bundle / "ms-playwright")
-    # Also look next to the executable / project root.
-    exe_dir = Path(sys.executable).parent if _is_frozen() else Path(__file__).resolve().parents[2]
-    candidates.append(exe_dir / "ms-playwright")
+    # Fallback: ms-playwright sitting next to the EXE.
+    candidates.append(Path(sys.executable).parent / "ms-playwright")
 
     for path in candidates:
         if path.is_dir():

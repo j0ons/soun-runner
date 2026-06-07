@@ -25,3 +25,10 @@ Thumbs.db
 
 # Internal session notes / sales plan — never commit
 sessionlog.md
+
+# PyInstaller build artifacts
+build/
+dist/
+build-venv/
+*.spec.bak
+_sr_cleanup.bat
