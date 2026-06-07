@@ -52,6 +52,15 @@ def _quiet_output():
 # None = not probed yet; "playwright" / "weasyprint" / "none" once decided.
 _ENGINE: str | None = None
 
+# Human-readable reason the most recent render attempt failed (for diagnostics
+# surfaced in the UI / logs instead of a silent "PDF not available").
+_LAST_ERROR: str = ""
+
+
+def last_error() -> str:
+    """Reason the last render_pdf() call failed, or '' if none/last succeeded."""
+    return _LAST_ERROR
+
 
 def _is_frozen() -> bool:
     """True when running inside a PyInstaller/py2exe bundle."""
@@ -97,9 +106,12 @@ def _prepare_chromium_env() -> None:
 
 def _render_with_playwright(html: str, out_path: str) -> bool:
     """Render via headless Chromium. Returns True on success."""
+    global _LAST_ERROR
     try:
         from playwright.sync_api import sync_playwright
     except Exception:
+        _LAST_ERROR = ("Playwright is not installed. Run: pip install playwright "
+                       "&& playwright install chromium")
         return False
 
     _prepare_chromium_env()
@@ -121,21 +133,31 @@ def _render_with_playwright(html: str, out_path: str) -> bool:
             finally:
                 browser.close()
         return True
-    except Exception:
+    except Exception as exc:
+        msg = str(exc)
+        if "Executable doesn't exist" in msg or "Looks like Playwright" in msg:
+            _LAST_ERROR = ("Chromium browser not installed for Playwright. "
+                           "Run: playwright install chromium")
+        else:
+            _LAST_ERROR = f"Chromium render failed: {msg}"
         return False
 
 
 def _render_with_weasyprint(html: str, out_path: str) -> bool:
     """Render via WeasyPrint (needs native GTK). Returns True on success."""
+    global _LAST_ERROR
     try:
         with _quiet_output():
             from weasyprint import HTML as WP
-    except Exception:
+    except Exception as exc:
+        _LAST_ERROR = (f"WeasyPrint unavailable ({exc}). Install the Chromium "
+                       "engine instead: pip install playwright && playwright install chromium")
         return False
     try:
         WP(string=html).write_pdf(out_path)
         return True
-    except Exception:
+    except Exception as exc:
+        _LAST_ERROR = f"WeasyPrint render failed: {exc}"
         return False
 
 
@@ -146,27 +168,35 @@ def render_pdf(html: str, out_path: str | os.PathLike) -> bool:
     True on success, False if no engine could produce a PDF (caller should then
     fall back to serving the HTML report).
     """
-    global _ENGINE
+    global _ENGINE, _LAST_ERROR
     out_path = str(out_path)
+    _LAST_ERROR = ""
 
     # If we've already found a working engine, go straight to it but still allow
     # falling through to the other on a transient failure.
     if _ENGINE == "playwright":
         if _render_with_playwright(html, out_path):
+            _LAST_ERROR = ""
             return True
     elif _ENGINE == "weasyprint":
         if _render_with_weasyprint(html, out_path):
+            _LAST_ERROR = ""
             return True
 
     # First run (or the cached engine just failed): probe in priority order.
     if _render_with_playwright(html, out_path):
         _ENGINE = "playwright"
+        _LAST_ERROR = ""
         return True
     if _render_with_weasyprint(html, out_path):
         _ENGINE = "weasyprint"
+        _LAST_ERROR = ""
         return True
 
     _ENGINE = "none"
+    if not _LAST_ERROR:
+        _LAST_ERROR = ("No PDF engine available. Run: pip install playwright "
+                       "&& playwright install chromium")
     return False
 
 

@@ -280,7 +280,7 @@ def _run_free_job(job_id: str, app) -> None:
         log(f"    → {free.total_findings} exposed-service finding(s)")
 
         # Generate BOTH variants: client (plain language) + engineer (fix steps)
-        from app.modules.pdf import render_pdf
+        from app.modules.pdf import render_pdf, last_error
         for variant in ("client", "engineer"):
             with app.app_context():
                 html_content = render_template("free_report.html", r=free, variant=variant)
@@ -292,7 +292,8 @@ def _run_free_job(job_id: str, app) -> None:
                 job[f"report_pdf_{variant}"] = str(pdf_path)
                 log(f"    → {variant} report PDF generated")
             else:
-                log(f"    {variant} PDF skipped (no PDF engine available — HTML report still works)")
+                job["pdf_error"] = last_error()
+                log(f"    {variant} PDF skipped: {last_error()}")
 
         # default report links point to the client report
         job["report_html"] = job.get("report_html_client")
@@ -407,10 +408,12 @@ def _rebuild_with_engineer(job_id: str, app) -> None:
         html_path = _REPORTS_DIR / f"{job_id}.html"
         html_path.write_text(html_content, encoding="utf-8")
         job["report_html"] = str(html_path)
-        from app.modules.pdf import render_pdf
+        from app.modules.pdf import render_pdf, last_error
         pdf_path = _REPORTS_DIR / f"{job_id}.pdf"
         if render_pdf(html_content, pdf_path):
             job["report_pdf"] = str(pdf_path)
+        else:
+            job["pdf_error"] = last_error()
         job["stats"]["findings"] = cached.total_findings
         job["stats"]["critical"] = cached.critical_count
         job["log"].append(f"{_ts()}  [*] Report updated with field assessment.")
@@ -582,7 +585,14 @@ def download_pdf(job_id: str):
         return "Job not found.", 404
     pdf_path = job.get("report_pdf")
     if not pdf_path or not Path(pdf_path).exists():
-        return "PDF not available.", 404
+        from app.modules.pdf import last_error
+        reason = job.get("pdf_error") or last_error() or "PDF was not generated."
+        return (
+            f"<h2>PDF not available</h2><p><b>Reason:</b> {reason}</p>"
+            f"<p>The HTML report still works — "
+            f"<a href='/download/html/{job_id}'>download the HTML version</a> "
+            f"and use your browser's Print &rarr; Save as PDF.</p>"
+        ), 404
     return send_file(pdf_path, as_attachment=True,
                      download_name=f"SounRunner-{_safe_name(job['client_name'])}.pdf")
 
@@ -821,13 +831,14 @@ def _run_job(job_id: str, app) -> None:
         job["report_html"] = str(html_path)
 
         # ── 7. PDF ────────────────────────────────────────────────────────────
-        from app.modules.pdf import render_pdf
+        from app.modules.pdf import render_pdf, last_error
         pdf_path = _REPORTS_DIR / f"{job_id}.pdf"
         if render_pdf(html_content, pdf_path):
             job["report_pdf"] = str(pdf_path)
             log("    → PDF report generated")
         else:
-            log("    PDF skipped (no PDF engine available — HTML report still works)")
+            job["pdf_error"] = last_error()
+            log(f"    PDF skipped: {last_error()}")
 
         log("")
         log("╚══ ASSESSMENT COMPLETE ══╝")
