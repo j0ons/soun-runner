@@ -22,3 +22,6 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+
+# Internal session notes / sales plan — never commit
+sessionlog.md
