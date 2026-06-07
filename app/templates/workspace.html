@@ -77,6 +77,27 @@ body { font-family:var(--sans); background:var(--bg); color:var(--txt); min-heig
 .tb.on.false_positive { background:#2a2410; color:#d9bc4a; border-color:#5a4f1a; }
 .tb.on.accepted_risk { background:#1a2230; color:#6a9bd5; border-color:#2a4a6a; }
 .tb.on.fixed { background:#162a1a; color:#5ab584; border-color:#2a5a3a; }
+.fix-row { margin-top:0.4rem; }
+.tb.fixbtn { background:#0e2230; color:#4fd1e0; border-color:#1a4654; }
+.tb.fixbtn:hover { background:#123040; color:#7fe6f2; }
+
+/* fix modal */
+.fix-modal { display:none; position:fixed; inset:0; background:rgba(0,8,11,0.82); z-index:50; align-items:center; justify-content:center; padding:2rem; }
+.fix-modal.open { display:flex; }
+.fix-box { background:#0a1620; border:1px solid var(--line2); border-radius:10px; max-width:880px; width:100%; max-height:88vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,0.6); }
+.fix-hd { padding:1rem 1.25rem; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
+.fix-hd h3 { font-size:0.95rem; color:var(--txt); margin:0; }
+.fix-x { cursor:pointer; color:var(--dim); font-size:1.2rem; }
+.fix-bd { padding:1.25rem; }
+.fix-sum { color:#9fc2d4; font-size:0.82rem; margin-bottom:0.75rem; }
+.fix-warn { background:#2a1416; border:1px solid #6a2a2e; color:#ff9a9a; padding:0.7rem 0.9rem; border-radius:6px; font-size:0.76rem; margin-bottom:0.9rem; }
+.fix-steps { font-size:0.76rem; color:var(--dim); margin:0 0 0.9rem 1.1rem; line-height:1.5; }
+.fix-lbl { font-size:0.68rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--dim); margin:0.9rem 0 0.35rem; }
+.fix-pre { background:#05101a; border:1px solid var(--line); border-radius:6px; padding:0.8rem; font-family:var(--mono); font-size:0.72rem; color:#bfe; white-space:pre-wrap; word-break:break-word; max-height:240px; overflow:auto; }
+.fix-actions { display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:0.9rem; }
+.fix-dl { padding:0.5rem 0.9rem; border-radius:5px; font-family:var(--mono); font-size:0.72rem; font-weight:700; cursor:pointer; text-decoration:none; border:1px solid #14b566; background:linear-gradient(180deg,#0e9e57,#0a7a43); color:#021109; }
+.fix-dl.rb { background:#1a0c10; border-color:#5a2230; color:#ff8a8a; }
+.fix-note { font-size:0.7rem; color:var(--dim); margin-top:0.8rem; font-style:italic; }
 
 .manual-form { padding:0.85rem 1rem; border-top:1px solid var(--line); }
 .manual-form input, .manual-form select, .manual-form textarea { width:100%; background:#0c0e11; border:1px solid var(--line2); border-radius:4px; padding:0.4rem 0.55rem; color:var(--txt); font-family:var(--sans); font-size:0.76rem; margin-bottom:0.4rem; outline:none; }
@@ -144,6 +165,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--txt); min-heig
         <span class="tb accepted_risk {{ 'on' if f.state=='accepted_risk' }}" onclick="triage(this,'{{ f.key|e }}','accepted_risk')">Accepted</span>
         <span class="tb fixed {{ 'on' if f.state=='fixed' }}" onclick="triage(this,'{{ f.key|e }}','fixed')">Fixed</span>
       </div>
+      <div class="fix-row"><span class="tb fixbtn" onclick="openFix('{{ f.key|e }}')">⚙ Generate Fix</span></div>
     </div>
     {% endfor %}
 
@@ -237,6 +259,67 @@ function addManual() {
       setTimeout(() => { document.querySelector('.manual-form button').textContent = 'Add to report'; }, 1800);
     }).catch(()=>{});
 }
+
+// ── Deploy a Fix ───────────────────────────────────────────────────────────
+let fixCache = null;
+
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function openFix(key) {
+  const modal = document.getElementById('fixModal');
+  const body = document.getElementById('fixBody');
+  const titleEl = document.getElementById('fixTitle');
+  titleEl.textContent = 'Generating fix…';
+  body.innerHTML = '<div class="fix-sum">Loading…</div>';
+  modal.classList.add('open');
+
+  const render = (fixes) => {
+    const fx = fixes.find(f => f.key === key);
+    if (!fx) {
+      titleEl.textContent = 'No fix available';
+      body.innerHTML = '<div class="fix-sum">There is no automated fix recipe for this finding yet. Use the remediation runbook in the report.</div>';
+      return;
+    }
+    titleEl.textContent = fx.title + '  —  ' + (fx.host || 'target') + (fx.port ? (':' + fx.port) : '');
+    let html = '<div class="fix-sum">' + esc(fx.summary) + '</div>';
+    if (fx.warnings && fx.warnings.length) {
+      fx.warnings.forEach(w => { html += '<div class="fix-warn">⚠ ' + esc(w) + '</div>'; });
+    }
+    if (fx.steps && fx.steps.length) {
+      html += '<ul class="fix-steps">' + fx.steps.map(s => '<li>' + esc(s) + '</li>').join('') + '</ul>';
+    }
+    html += '<div class="fix-lbl">Fix script (' + fx.platform + ' / ' + fx.language + ') — review before running</div>';
+    html += '<div class="fix-pre">' + esc(fx.fix_script) + '</div>';
+    html += '<div class="fix-lbl">Rollback script — undoes the fix</div>';
+    html += '<div class="fix-pre">' + esc(fx.rollback_script) + '</div>';
+    const ek = encodeURIComponent(key);
+    html += '<div class="fix-actions">'
+         +  '<a class="fix-dl" href="/fix/' + jobId + '/fix/' + ek + '">⬇ Download Fix Script</a>'
+         +  '<a class="fix-dl rb" href="/fix/' + jobId + '/rollback/' + ek + '">⬇ Download Rollback</a>'
+         +  '</div>';
+    if (fx.note) html += '<div class="fix-note">' + esc(fx.note) + '</div>';
+    html += '<div class="fix-note">Soun Runner does not run anything on the target. Review every command, then run it yourself on the host.</div>';
+    body.innerHTML = html;
+  };
+
+  if (fixCache) { render(fixCache); return; }
+  fetch('/fix/' + jobId)
+    .then(r => r.json())
+    .then(d => { fixCache = d.fixes || []; render(fixCache); })
+    .catch(() => { body.innerHTML = '<div class="fix-warn">Could not load fixes.</div>'; });
+}
+
+function closeFix() { document.getElementById('fixModal').classList.remove('open'); }
 </script>
+
+<div class="fix-modal" id="fixModal" onclick="if(event.target===this)closeFix()">
+  <div class="fix-box">
+    <div class="fix-hd">
+      <h3 id="fixTitle">Fix</h3>
+      <span class="fix-x" onclick="closeFix()">✕</span>
+    </div>
+    <div class="fix-bd" id="fixBody"></div>
+  </div>
+</div>
 </body>
 </html>

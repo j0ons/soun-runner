@@ -181,6 +181,74 @@ def workspace_manual(job_id: str):
     return jsonify({"ok": True})
 
 
+# ── Deploy a Fix (Advanced only) — generate reviewable, reversible fix scripts ──
+
+def _job_findings(job):
+    """Return the report Finding objects for a job, or []."""
+    rd = job.get("report_data")
+    return list(getattr(rd, "findings", [])) if rd is not None else []
+
+
+def _find_fix(job, key):
+    """Generate the FixScript for the finding matching `key`, or None."""
+    from app.modules.workspace import finding_key
+    from app.modules.fixgen import generate_fix
+    domain = job.get("domain", "")
+    for f in _job_findings(job):
+        if finding_key(f.host, f.port, f.title) == key:
+            return generate_fix(f, domain=domain)
+    return None
+
+
+@bp.get("/fix/<job_id>")
+def fix_list(job_id: str):
+    """JSON list of available fixes for a job's findings (Advanced only)."""
+    if not _advanced_unlocked():
+        return jsonify({"error": "locked"}), 403
+    job = _jobs.get(job_id)
+    if not job or job.get("mode") == "free":
+        return jsonify({"error": "not available"}), 404
+    from app.modules.workspace import finding_key
+    from app.modules.fixgen import generate_fix
+    domain = job.get("domain", "")
+    out = []
+    for f in _job_findings(job):
+        fx = generate_fix(f, domain=domain)
+        if not fx:
+            continue
+        out.append({
+            "key": finding_key(f.host, f.port, f.title),
+            "title": fx.title, "finding": fx.finding_title, "host": fx.host,
+            "port": fx.port, "platform": fx.platform, "language": fx.language,
+            "summary": fx.summary, "steps": fx.steps, "warnings": fx.warnings,
+            "note": fx.note, "fix_script": fx.fix_script, "rollback_script": fx.rollback_script,
+        })
+    return jsonify({"fixes": out, "count": len(out)})
+
+
+@bp.get("/fix/<job_id>/<kind>/<path:key>")
+def fix_download(job_id: str, kind: str, key: str):
+    """Download a fix or rollback script for a finding (Advanced only)."""
+    if not _advanced_unlocked():
+        return "Locked.", 403
+    if kind not in ("fix", "rollback"):
+        return "Unknown.", 404
+    job = _jobs.get(job_id)
+    if not job or job.get("mode") == "free":
+        return "Not available.", 404
+    fx = _find_fix(job, key)
+    if not fx:
+        return "No fix available for this finding.", 404
+    content = fx.fix_script if kind == "fix" else fx.rollback_script
+    fname = fx.fix_filename if kind == "fix" else fx.rollback_filename
+    from flask import Response
+    return Response(
+        content,
+        mimetype="text/plain",
+        headers={"Content-Disposition": f"attachment; filename={fname}"},
+    )
+
+
 @bp.get("/api/subnets")
 def api_subnets():
     """Discover routed neighbouring subnets (slow ~10s — called async)."""
