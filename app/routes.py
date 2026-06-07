@@ -21,20 +21,31 @@ from app.modules.scanner import find_nmap, run_scan_streaming, validate_target
 
 bp = Blueprint("main", __name__)
 
-# Advanced console password — overridable via env at deploy time.
-# Advanced console password. Set the real password via the SOUN_ADVANCED_PASSWORD
-# environment variable (see README / launcher). The default below is only a
-# placeholder so no real credential is committed to source control.
-ADVANCED_PASSWORD = os.environ.get("SOUN_ADVANCED_PASSWORD", "changeme")
+# Advanced console password. Works out-of-the-box with the default below; set
+# the SOUN_ADVANCED_PASSWORD environment variable to override per-deployment.
+# This gate only protects a local (127.0.0.1) console on the operator's own
+# machine — it is a convenience lock, not a security boundary.
+ADVANCED_PASSWORD = os.environ.get("SOUN_ADVANCED_PASSWORD", "Tmppassword")
 
 _jobs: dict[str, dict] = {}
+
+# Set once a self-wipe has started, so a double-click can't trigger a second
+# export/delete or a second shutdown.
+_wiping = False
 
 
 def _advanced_unlocked() -> bool:
     return bool(session.get("advanced_ok"))
 
-_REPORTS_DIR = Path(__file__).parent.parent / "reports"
-_REPORTS_DIR.mkdir(exist_ok=True)
+# Reports must live in a PERSISTENT location. In a frozen .exe, __file__ points
+# inside PyInstaller's volatile _MEIPASS temp dir (auto-deleted on exit), so we
+# anchor next to the executable instead. In source runs, use the project root.
+if getattr(sys, "frozen", False):
+    _BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    _BASE_DIR = Path(__file__).resolve().parent.parent
+_REPORTS_DIR = _BASE_DIR / "reports"
+_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 if sys.platform == "darwin":
     _brew_lib = "/opt/homebrew/lib"
@@ -412,7 +423,9 @@ def _rebuild_with_engineer(job_id: str, app) -> None:
         pdf_path = _REPORTS_DIR / f"{job_id}.pdf"
         if render_pdf(html_content, pdf_path):
             job["report_pdf"] = str(pdf_path)
+            job["pdf_error"] = ""
         else:
+            job["report_pdf"] = None   # don't point at a now-removed stale PDF
             job["pdf_error"] = last_error()
         job["stats"]["findings"] = cached.total_findings
         job["stats"]["critical"] = cached.critical_count
@@ -531,13 +544,23 @@ def wipe_app(job_id: str):
     schedules removal of the app (the frozen .exe, or the source tree) and shuts
     the server down. If the export fails, nothing is deleted.
     """
+    global _wiping
+    if _wiping:
+        return jsonify({"ok": True, "message": "Wipe already in progress."})
+    _wiping = True
+
     from app.modules.selfwipe import wipe as _do_wipe
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    result = _do_wipe(_REPORTS_DIR, stamp)
+    try:
+        result = _do_wipe(_REPORTS_DIR, stamp)
+    except Exception as exc:
+        _wiping = False
+        return jsonify({"ok": False, "message": f"Wipe failed: {exc}"}), 500
 
     if not result.get("ok"):
-        # Export/cleanup failed — report it, do NOT shut down.
+        # Export/cleanup failed — report it, allow retry, do NOT shut down.
+        _wiping = False
         return jsonify(result), 500
 
     # Success: respond, then exit the process shortly after so the response
@@ -587,7 +610,15 @@ def download_variant_pdf(job_id: str, variant: str):
         return "Unknown report.", 404
     pdf_path = job.get(f"report_pdf_{variant}")
     if not pdf_path or not Path(pdf_path).exists():
-        return "PDF not available.", 404
+        # Use the per-job error only (the module global can bleed across
+        # concurrent jobs under the threaded server).
+        reason = job.get("pdf_error") or "PDF was not generated."
+        return (
+            f"<h2>PDF not available</h2><p><b>Reason:</b> {reason}</p>"
+            f"<p>The HTML report still works — "
+            f"<a href='/download/{variant}/html/{job_id}'>download the HTML version</a> "
+            f"and use your browser's Print &rarr; Save as PDF.</p>"
+        ), 404
     return send_file(pdf_path, as_attachment=True,
                      download_name=f"SounRunner-{_safe_name(job['client_name'])}-{variant}.pdf")
 
@@ -613,8 +644,9 @@ def download_pdf(job_id: str):
         return "Job not found.", 404
     pdf_path = job.get("report_pdf")
     if not pdf_path or not Path(pdf_path).exists():
-        from app.modules.pdf import last_error
-        reason = job.get("pdf_error") or last_error() or "PDF was not generated."
+        # Use the per-job error only (the module global can bleed across
+        # concurrent jobs under the threaded server).
+        reason = job.get("pdf_error") or "PDF was not generated."
         return (
             f"<h2>PDF not available</h2><p><b>Reason:</b> {reason}</p>"
             f"<p>The HTML report still works — "

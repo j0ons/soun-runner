@@ -105,6 +105,13 @@ def _prepare_chromium_env() -> None:
             os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(path)
             return
 
+    # Frozen build but no bundled Chromium found — record it so the failure is
+    # diagnosable instead of silently falling back to a non-existent user cache.
+    global _LAST_ERROR
+    _LAST_ERROR = ("Bundled Chromium not found in the packaged app (looked in: "
+                   + "; ".join(str(c) for c in candidates) + "). The build may be "
+                   "missing the browser; rebuild with build-exe.bat.")
+
 
 def _render_with_playwright(html: str, out_path: str) -> bool:
     """Render via headless Chromium. Returns True on success."""
@@ -123,9 +130,10 @@ def _render_with_playwright(html: str, out_path: str) -> bool:
             browser = p.chromium.launch(args=["--no-sandbox"])
             try:
                 page = browser.new_page()
-                # set_content + wait for network idle so data-URI images (the
-                # base64 logo) and any web fonts are fully laid out before print.
-                page.set_content(html, wait_until="networkidle")
+                # All assets are inline (base64 data-URIs) — there is no real
+                # network to idle on, so wait for "load" with an explicit, generous
+                # timeout. (networkidle here risks a needless 30s timeout->failure.)
+                page.set_content(html, wait_until="load", timeout=60000)
                 page.pdf(
                     path=out_path,
                     format="A4",
@@ -169,31 +177,61 @@ def render_pdf(html: str, out_path: str | os.PathLike) -> bool:
     Tries Chromium (Playwright) first, then WeasyPrint. Never raises — returns
     True on success, False if no engine could produce a PDF (caller should then
     fall back to serving the HTML report).
+
+    Writes ATOMICALLY: each engine renders to a temp file; only on success is it
+    moved into ``out_path`` via os.replace(). On total failure, any pre-existing
+    ``out_path`` is removed — so callers never serve a stale or half-written PDF.
     """
     global _ENGINE, _LAST_ERROR
     out_path = str(out_path)
     _LAST_ERROR = ""
+    tmp_path = out_path + ".tmp"
 
-    # If we've already found a working engine, go straight to it but still allow
-    # falling through to the other on a transient failure.
-    if _ENGINE == "playwright":
-        if _render_with_playwright(html, out_path):
+    def _cleanup_tmp():
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+
+    def _promote() -> bool:
+        # Move the temp file into place atomically; verify it's a real PDF.
+        try:
+            if not os.path.exists(tmp_path) or os.path.getsize(tmp_path) < 1000:
+                return False
+            os.replace(tmp_path, out_path)
+            return True
+        except Exception as exc:
+            _set_err(f"PDF finalize failed: {exc}")
+            return False
+
+    def _set_err(msg):
+        global _LAST_ERROR
+        _LAST_ERROR = msg
+
+    _cleanup_tmp()
+
+    # Try the cached engine first (if any), then probe in priority order —
+    # without launching the same engine twice in a row.
+    order = ["playwright", "weasyprint"]
+    if _ENGINE in order:
+        order.remove(_ENGINE)
+        order.insert(0, _ENGINE)
+
+    engines = {"playwright": _render_with_playwright, "weasyprint": _render_with_weasyprint}
+    for name in order:
+        if engines[name](html, tmp_path) and _promote():
+            _ENGINE = name
             _LAST_ERROR = ""
             return True
-    elif _ENGINE == "weasyprint":
-        if _render_with_weasyprint(html, out_path):
-            _LAST_ERROR = ""
-            return True
+        _cleanup_tmp()
 
-    # First run (or the cached engine just failed): probe in priority order.
-    if _render_with_playwright(html, out_path):
-        _ENGINE = "playwright"
-        _LAST_ERROR = ""
-        return True
-    if _render_with_weasyprint(html, out_path):
-        _ENGINE = "weasyprint"
-        _LAST_ERROR = ""
-        return True
+    # All engines failed — ensure no stale final file is left to be served.
+    try:
+        if os.path.exists(out_path):
+            os.remove(out_path)
+    except Exception:
+        pass
 
     _ENGINE = "none"
     if not _LAST_ERROR:

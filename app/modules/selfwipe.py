@@ -90,23 +90,33 @@ def _schedule_delete_exe(exe_path: Path, keep: Path | None) -> None:
     contents that are NOT the keep path.
     """
     exe_path = Path(exe_path)
+    exe_full = str(exe_path)
+    exe_name = exe_path.name
     bat = exe_path.parent / "_sr_cleanup.bat"
-    # Wait for PID to exit, retry-delete the exe, then delete this batch.
     pid = os.getpid()
+    # Wait (bounded) for OUR pid+image to exit, then delete the exe by full path
+    # (bounded retries), then self-delete. Bounded loops avoid spinning forever
+    # on PID reuse or an undeletable file. Image-name filter avoids matching the
+    # PID digits elsewhere in tasklist output.
     script = f"""@echo off
-echo Cleaning up SounRunner...
+set /a tries=0
 :waitloop
-tasklist /FI "PID eq {pid}" 2>NUL | find "{pid}" >NUL
-if not errorlevel 1 (
-  timeout /t 1 /nobreak >NUL
-  goto waitloop
-)
+tasklist /FI "PID eq {pid}" /FI "IMAGENAME eq {exe_name}" /NH 2>NUL | findstr /I "{exe_name}" >NUL
+if errorlevel 1 goto delloop
+set /a tries+=1
+if %tries% GEQ 30 goto delloop
+timeout /t 1 /nobreak >NUL
+goto waitloop
 :delloop
-del /f /q "{exe_path.name}" >NUL 2>&1
-if exist "{exe_path.name}" (
-  timeout /t 1 /nobreak >NUL
-  goto delloop
-)
+set /a dtries=0
+:delretry
+del /f /q "{exe_full}" >NUL 2>&1
+if not exist "{exe_full}" goto done
+set /a dtries+=1
+if %dtries% GEQ 15 goto done
+timeout /t 1 /nobreak >NUL
+goto delretry
+:done
 del /f /q "%~f0" >NUL 2>&1
 """
     bat.write_text(script, encoding="utf-8")
@@ -136,7 +146,18 @@ def _delete_source_tree(project_dir: Path, keep: Path | None) -> None:
     # Don't delete obviously-wrong roots.
     if project_dir == Path.home().resolve() or project_dir.parent == project_dir:
         raise IOError("refusing to wipe an unsafe directory")
+    # Allowlist guard: only delete something that actually LOOKS like this app,
+    # so an unexpected layout can never make us rmtree the wrong directory.
+    signature = ["main.py", "app", "requirements.txt"]
+    if not all((project_dir / s).exists() for s in signature):
+        raise IOError(
+            f"refusing to wipe {project_dir}: it does not look like the SounRunner app "
+            f"(missing one of {signature})"
+        )
     shutil.rmtree(project_dir, ignore_errors=True)
+    # Verify deletion actually completed; report failure rather than false success.
+    if project_dir.exists() and any(project_dir.iterdir()):
+        raise IOError(f"app directory could not be fully removed: {project_dir}")
 
 
 def wipe(reports_dir: Path, stamp: str) -> dict:
@@ -169,7 +190,10 @@ def wipe(reports_dir: Path, stamp: str) -> dict:
                 "count": count, "mode": "frozen" if _is_frozen() else "source",
                 "message": f"Reports saved, but app cleanup failed: {exc}"}
 
-    msg = (f"{count} report file(s) saved to {export_path}. App removed."
-           if export_path else "No reports found to save. App removed.")
+    # Frozen deletion happens in a detached batch AFTER this process exits, so
+    # it isn't confirmed yet; source deletion already completed synchronously.
+    removed = "App will remove itself after this window closes." if mode == "frozen" else "App removed."
+    saved = (f"{count} report file(s) saved to {export_path}."
+             if export_path else "No reports found to save.")
     return {"ok": True, "export_path": str(export_path) if export_path else None,
-            "count": count, "mode": mode, "message": msg}
+            "count": count, "mode": mode, "message": f"{saved} {removed}"}
