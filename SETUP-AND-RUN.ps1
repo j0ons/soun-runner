@@ -76,12 +76,19 @@ if (-not (Have git)) {
     if ($gc) { $git = $gc.FullName } else { throw "Git not found after install." }
 }
 
-# --- 3. Nmap (background; user clicks through Npcap) ------------------------
+# --- 3. Nmap (SILENT — no wizard, installs Npcap automatically) -------------
 if (-not (Test-Path "C:\Program Files (x86)\Nmap\nmap.exe") -and -not (Test-Path "C:\Program Files\Nmap\nmap.exe")) {
-    Say "Downloading Nmap installer (a wizard will open — accept Npcap) ..."
+    Say "Installing Nmap silently (includes Npcap, no clicks needed) ..."
     $nm = Join-Path $dl "nmap-setup.exe"
-    try { Get-File "https://nmap.org/dist/nmap-7.95-setup.exe" $nm; Start-Process $nm } catch {
-        Write-Host "    Nmap download failed — install it later from nmap.org. Scans need it." -ForegroundColor Yellow
+    try {
+        Get-File "https://nmap.org/dist/nmap-7.95-setup.exe" $nm
+        # /S = NSIS silent install; Nmap's installer silently installs Npcap too.
+        Start-Process -FilePath $nm -ArgumentList "/S" -Wait
+        Refresh-Path
+        if (Test-Path "C:\Program Files (x86)\Nmap\nmap.exe") { Say "Nmap installed." Green }
+        else { Write-Host "    Nmap silent install finished but binary not found — scans may need a manual install." -ForegroundColor Yellow }
+    } catch {
+        Write-Host "    Nmap install failed — install later from nmap.org. (PDF/reports still work; only scanning needs it.)" -ForegroundColor Yellow
     }
 } else { Say "Nmap already present." Green }
 
@@ -103,8 +110,21 @@ Say "Installing Python dependencies ..."
 & $python -m pip install --upgrade pip
 & $python -m pip install -r requirements.txt
 
-Say "Downloading Chromium for PDF engine (~120 MB, one-time) ..."
-& $python -m playwright install chromium
+Say "Installing Chromium for the PDF engine (~120 MB, one-time) ..."
+# Retry — this download is the #1 thing that fails on flaky networks, and a
+# missing Chromium is exactly what causes the 'libgobject-2.0-0' PDF error.
+$chromeOk = $false
+for ($i = 1; $i -le 3; $i++) {
+    Write-Host "    playwright install chromium ($i/3) ..."
+    & $python -m playwright install chromium
+    # Verify Chromium can actually launch (the real test).
+    $check = & $python -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); b=p.chromium.launch(); b.close(); p.stop(); print('OK')" 2>&1
+    if ($check -match "OK") { $chromeOk = $true; break }
+    Write-Host "    Chromium not ready yet, retrying..." -ForegroundColor Yellow
+    Start-Sleep 2
+}
+if ($chromeOk) { Say "PDF engine ready: Chromium verified." Green }
+else { Write-Host "    WARNING: Chromium could not be installed/launched. PDFs will be unavailable (HTML reports still work). Re-run this script on a stable network." -ForegroundColor Red }
 
 # --- 6. Run ----------------------------------------------------------------
 Say "Starting SounRunner ...  (browser opens at http://127.0.0.1:5757)" Green
