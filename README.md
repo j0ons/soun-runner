@@ -17,15 +17,28 @@ It has two modes:
 
 ## 1. Quick start
 
-### On a Mac (your own testing)
-Double-click **`START-MAC.command`**.
-(First time: right-click → Open, to bypass the macOS security prompt.)
+### Fresh Windows machine (client site, incl. via AnyDesk) — ONE command
 
-### On a Windows machine (client site)
-Double-click **`START-WINDOWS.bat`**.
+Open **Command Prompt** (cmd) and paste this single line. It works whether you
+land in cmd or PowerShell — no need to think about which shell you're in:
 
-Either way, a browser opens at **http://127.0.0.1:5757** and you'll see the
-mode-selection screen.
+```
+powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/j0ons/soun-runner/main/SETUP-AND-RUN.ps1 | iex"
+```
+
+It installs everything (VC++ runtime, Python, Git, Nmap, Chromium), fetches the
+app, prints a verification summary, and launches it. Re-running it later just
+updates to the latest version (git pull).
+
+> If you've copied the repo to the machine, you can instead double-click
+> **`SETUP.bat`** — same thing.
+
+### Already set up (Python present) — just launch
+- **Windows:** double-click **`START-WINDOWS.bat`**
+- **Mac (your testing):** double-click **`START-MAC.command`** (first time:
+  right-click → Open)
+
+Either way, a browser opens at **http://127.0.0.1:5757**.
 
 **The Advanced password is:** `Tmppassword`
 

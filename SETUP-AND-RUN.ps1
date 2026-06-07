@@ -136,29 +136,36 @@ if (-not $git) {
 }
 Good "Using git: $git"
 
-# --- 3. Nmap (silent; poll for the binary) ---------------------------------
-$nmapExe = $null
-foreach ($p in "C:\Program Files (x86)\Nmap\nmap.exe","C:\Program Files\Nmap\nmap.exe") {
-    if (Test-Path $p) { $nmapExe = $p }
+# --- 3. Nmap -----------------------------------------------------------------
+# Soun Runner uses unprivileged TCP-connect scans, which work WITHOUT the Npcap
+# raw-packet driver. So we install Nmap's own files (nmap.exe is what matters)
+# and don't depend on Npcap. We try silent first; if nmap.exe doesn't appear we
+# fall back to the interactive installer brought to the foreground.
+function Find-Nmap {
+    foreach ($p in "C:\Program Files (x86)\Nmap\nmap.exe","C:\Program Files\Nmap\nmap.exe") {
+        if (Test-Path $p) { return $p }
+    }
+    return $null
 }
+$nmapExe = Find-Nmap
 if (-not $nmapExe) {
-    Say "Installing Nmap silently (includes Npcap) ..."
+    Say "Installing Nmap ..."
     $nm = Join-Path $dl "nmap-setup.exe"
     if (Get-File "https://nmap.org/dist/nmap-7.95-setup.exe" $nm) {
+        # Attempt 1: fully silent.
+        Write-Host "    attempting silent install (/S) ..."
         Start-Process -FilePath $nm -ArgumentList "/S" -Wait
-        foreach ($t in 1..12) {
-            foreach ($p in "C:\Program Files (x86)\Nmap\nmap.exe","C:\Program Files\Nmap\nmap.exe") {
-                if (Test-Path $p) { $nmapExe = $p; break }
-            }
-            if ($nmapExe) { break }
-            Start-Sleep 1
-        }
+        foreach ($t in 1..15) { $nmapExe = Find-Nmap; if ($nmapExe) { break }; Start-Sleep 1 }
+
+        # Attempt 2: interactive (Npcap's silent install often blocks /S on a
+        # fresh machine). Bring it to the front with a clear instruction.
         if (-not $nmapExe) {
-            Warn "Silent Nmap install did not land; opening the interactive installer (click Next, allow Npcap)..."
-            Start-Process -FilePath $nm -Wait
-            foreach ($p in "C:\Program Files (x86)\Nmap\nmap.exe","C:\Program Files\Nmap\nmap.exe") {
-                if (Test-Path $p) { $nmapExe = $p }
-            }
+            Warn "Silent install didn't complete. Opening the Nmap installer window now."
+            Warn "==> In the installer: click 'I Agree' / 'Next' through every screen, then Finish."
+            Warn "    (If an 'Npcap' screen appears, just click through it - Soun Runner does not require it.)"
+            Start-Process -FilePath $nm
+            # Wait up to 4 minutes for the operator to click through.
+            foreach ($t in 1..240) { $nmapExe = Find-Nmap; if ($nmapExe) { break }; Start-Sleep 1 }
         }
     }
 }
