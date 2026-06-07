@@ -189,6 +189,50 @@ def set_triage(job: dict, key: str, state: str) -> bool:
     return True
 
 
+# ── Manual severity override ────────────────────────────────────────────────────
+# The engineer can reclassify a finding's severity (e.g. a scanner-flagged
+# Critical that is Low in context). Stored on the job under "severity_overrides":
+# { finding_key: risk }. apply_severity_overrides() rewrites the report findings
+# so the change flows into the report/PDF and the risk counts.
+
+VALID_RISKS = ("critical", "high", "medium", "low", "info")
+
+
+def set_severity(job: dict, key: str, risk: str) -> bool:
+    """Override a finding's severity. risk='' clears the override (back to original)."""
+    overrides = job.setdefault("severity_overrides", {})
+    if risk == "":
+        overrides.pop(key, None)
+        return True
+    if risk not in VALID_RISKS:
+        return False
+    overrides[key] = risk
+    return True
+
+
+def apply_severity_overrides(report_data, overrides: dict) -> None:
+    """Rewrite report findings' .risk in place per the operator's overrides, then
+    re-sort by risk so the report reflects the new ordering. Records the original
+    risk on each overridden finding (as .original_risk) for an audit trail."""
+    if not overrides:
+        return
+    from app.modules.scanner import RISK_ORDER
+    for f in getattr(report_data, "findings", []):
+        k = finding_key(f.host, f.port, f.title)
+        new = overrides.get(k)
+        if new and new in VALID_RISKS and new != f.risk:
+            if not hasattr(f, "original_risk") or not getattr(f, "original_risk"):
+                try:
+                    f.original_risk = f.risk
+                except Exception:
+                    pass
+            f.risk = new
+    try:
+        report_data.findings.sort(key=lambda f: RISK_ORDER.get(f.risk, 99))
+    except Exception:
+        pass
+
+
 def add_manual_finding(job: dict, title: str, host: str, risk: str, detail: str) -> None:
     job.setdefault("manual_findings", []).append({
         "title": title[:200], "host": host[:80] or "manual",

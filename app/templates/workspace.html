@@ -82,6 +82,14 @@ body { font-family:var(--sans); background:var(--bg); color:var(--txt); min-heig
 .tb.on.false_positive { background:#2a2410; color:#d9bc4a; border-color:#5a4f1a; }
 .tb.on.accepted_risk { background:#1a2230; color:#6a9bd5; border-color:#2a4a6a; }
 .tb.on.fixed { background:#162a1a; color:#5ab584; border-color:#2a5a3a; }
+/* severity override */
+.sev-row { display:flex; align-items:center; gap:0.4rem; margin:0.45rem 0; }
+.sev-lbl { font-size:0.66rem; color:var(--dim); }
+.sev-sel { background:var(--panel2); color:var(--txt); border:1px solid var(--line2); border-radius:4px; font-size:0.7rem; padding:0.2rem 0.35rem; font-family:var(--mono); cursor:pointer; }
+.sev-now { font-weight:700; }
+.sev-now.sev-critical { color:#ff5c5c; } .sev-now.sev-high { color:#ff9a3d; }
+.sev-now.sev-medium { color:#e0c24a; } .sev-now.sev-low { color:#5a9bd5; } .sev-now.sev-info { color:#8a9aa8; }
+.sev-orig { font-size:0.64rem; color:var(--dim); font-style:italic; }
 .fix-row { margin-top:0.4rem; }
 .tb.fixbtn { background:#0e2230; color:#4fd1e0; border-color:#1a4654; }
 .tb.fixbtn:hover { background:#123040; color:#7fe6f2; }
@@ -163,7 +171,19 @@ body { font-family:var(--sans); background:var(--bg); color:var(--txt); min-heig
     {% for f in findings %}
     <div class="triage-item" data-key="{{ f.key }}">
       <div class="triage-title">{{ f.title }}</div>
-      <div class="triage-meta">{{ f.host }}{% if f.port %}:{{ f.port }}{% endif %} · {{ f.risk|upper }}</div>
+      <div class="triage-meta">
+        {{ f.host }}{% if f.port %}:{{ f.port }}{% endif %} ·
+        <span class="sev-now sev-{{ f.risk }}">{{ f.risk|upper }}</span>
+        {% if f.overridden and f.original_risk %}<span class="sev-orig">(was {{ f.original_risk|upper }})</span>{% endif %}
+      </div>
+      <div class="sev-row">
+        <span class="sev-lbl">Set severity:</span>
+        <select class="sev-sel" onchange="setSeverity('{{ f.key|e }}', this.value, this)">
+          {% for r in ['critical','high','medium','low','info'] %}
+          <option value="{{ r }}" {{ 'selected' if f.risk==r }}>{{ r|capitalize }}</option>
+          {% endfor %}
+        </select>
+      </div>
       <div class="triage-btns">
         <span class="tb confirmed {{ 'on' if f.state=='confirmed' }}" onclick="triage(this,'{{ f.key|e }}','confirmed')">Confirm</span>
         <span class="tb false_positive {{ 'on' if f.state=='false_positive' }}" onclick="triage(this,'{{ f.key|e }}','false_positive')">False+</span>
@@ -238,11 +258,35 @@ function runAction(action) {
 function triage(el, key, state) {
   const item = el.closest('.triage-item');
   const wasOn = el.classList.contains('on');
-  item.querySelectorAll('.tb').forEach(b => b.classList.remove('on'));
+  item.querySelectorAll('.tb').forEach(b => { if (!b.classList.contains('fixbtn')) b.classList.remove('on'); });
   const newState = wasOn ? '' : state;
   if (!wasOn) el.classList.add('on');
   const fd = new URLSearchParams({ key: key, state: newState || 'none' });
   fetch('/workspace/' + jobId + '/triage', { method:'POST', body:fd }).catch(()=>{});
+}
+
+function setSeverity(key, risk, sel) {
+  const item = sel.closest('.triage-item');
+  const now = item.querySelector('.sev-now');
+  sel.disabled = true;
+  const fd = new URLSearchParams({ key: key, risk: risk });
+  fetch('/workspace/' + jobId + '/severity', { method:'POST', body:fd })
+    .then(r => r.json())
+    .then(d => {
+      sel.disabled = false;
+      if (d.ok) {
+        // reflect the new severity on the chip
+        now.textContent = risk.toUpperCase();
+        now.className = 'sev-now sev-' + risk;
+        // brief confirmation
+        const old = sel.style.borderColor;
+        sel.style.borderColor = '#2dd47f';
+        setTimeout(() => { sel.style.borderColor = old; }, 1200);
+      } else {
+        alert('Could not set severity: ' + (d.error || d.warning || 'unknown'));
+      }
+    })
+    .catch(() => { sel.disabled = false; alert('Severity update failed (network).'); });
 }
 
 function addManual() {

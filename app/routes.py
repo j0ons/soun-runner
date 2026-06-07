@@ -124,11 +124,14 @@ def workspace(job_id: str):
     findings = []
     if rd is not None:
         triage = job.get("triage", {})
+        overrides = job.get("severity_overrides", {})
         from app.modules.workspace import finding_key
         for f in rd.findings:
             k = finding_key(f.host, f.port, f.title)
             findings.append({"key": k, "title": f.title, "host": f.host, "port": f.port,
-                             "risk": f.risk, "state": triage.get(k, "")})
+                             "risk": f.risk, "state": triage.get(k, ""),
+                             "overridden": k in overrides,
+                             "original_risk": getattr(f, "original_risk", "")})
     return render_template("workspace.html", job_id=job_id, job=job,
                            hosts=hosts, findings=findings, actions=ACTIONS,
                            manual=job.get("manual_findings", []))
@@ -179,6 +182,69 @@ def workspace_manual(job_id: str):
         request.form.get("detail", ""),
     )
     return jsonify({"ok": True})
+
+
+# ── Manual severity override (Advanced only) ───────────────────────────────────
+
+def _rerender_advanced_report(job, job_id, app):
+    """Re-render the advanced report HTML+PDF after report_data changed (e.g. a
+    severity override). Recomputes derived narrative bits so counts/score match."""
+    rd = job.get("report_data")
+    if rd is None:
+        return
+    # Refresh derived narrative/compliance that depend on findings + severity.
+    try:
+        from app.modules.compliance import map_findings
+        from app.modules.runbook import build_runbook
+        from app.modules.report_builder import _executive_summary
+        if rd.findings:
+            rd.compliance = map_findings(rd.findings)
+            rd.runbook_steps = build_runbook(rd.findings)
+        rd.executive_summary = _executive_summary(rd)
+    except Exception:
+        pass
+    with app.app_context():
+        html_content = render_template("report.html", r=rd)
+    html_path = _REPORTS_DIR / f"{job_id}.html"
+    html_path.write_text(html_content, encoding="utf-8")
+    job["report_html"] = str(html_path)
+    from app.modules.pdf import render_pdf, last_error
+    pdf_path = _REPORTS_DIR / f"{job_id}.pdf"
+    if render_pdf(html_content, pdf_path):
+        job["report_pdf"] = str(pdf_path)
+        job["pdf_error"] = ""
+    else:
+        job["report_pdf"] = None
+        job["pdf_error"] = last_error()
+    job["stats"]["findings"] = rd.total_findings
+    job["stats"]["critical"] = rd.critical_count
+
+
+@bp.post("/workspace/<job_id>/severity")
+def workspace_severity(job_id: str):
+    """Override a finding's severity, apply it to the report, and re-render."""
+    if not _advanced_unlocked():
+        return jsonify({"error": "locked"}), 403
+    job = _jobs.get(job_id)
+    if not job:
+        return jsonify({"error": "no job"}), 404
+    key = request.form.get("key", "")
+    risk = request.form.get("risk", "").strip().lower()
+    from app.modules.workspace import set_severity, apply_severity_overrides
+    if not set_severity(job, key, risk):
+        return jsonify({"error": "invalid severity"}), 400
+    rd = job.get("report_data")
+    if rd is not None:
+        apply_severity_overrides(rd, job.get("severity_overrides", {}))
+        from flask import current_app
+        try:
+            _rerender_advanced_report(job, job_id, current_app._get_current_object())
+        except Exception as exc:
+            return jsonify({"ok": True, "key": key, "risk": risk,
+                            "warning": f"severity set but report re-render failed: {exc}"})
+    return jsonify({"ok": True, "key": key, "risk": risk,
+                    "critical": job.get("stats", {}).get("critical"),
+                    "findings": job.get("stats", {}).get("findings")})
 
 
 # ── Deploy a Fix (Advanced only) — generate reviewable, reversible fix scripts ──
