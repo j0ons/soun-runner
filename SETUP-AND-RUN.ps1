@@ -39,6 +39,22 @@ function Refresh-Path {
     $env:Path = "$machine;$user"
 }
 
+# --- 0. Visual C++ Runtime -------------------------------------------------
+# Playwright's dependency `greenlet` is a compiled C extension that needs the
+# Microsoft VC++ runtime. A bare Windows / Sandbox doesn't have it, which causes
+# "DLL load failed while importing _greenlet" -> Playwright fails to import ->
+# PDFs fall back to (broken) WeasyPrint. Install it first, always (idempotent).
+Say "Installing Microsoft Visual C++ runtime (needed by Playwright) ..."
+try {
+    $vc = Join-Path $dl "vc_redist.x64.exe"
+    Get-File "https://aka.ms/vs/17/release/vc_redist.x64.exe" $vc
+    Start-Process -FilePath $vc -ArgumentList "/install /quiet /norestart" -Wait
+    Say "VC++ runtime installed." Green
+} catch {
+    Write-Host "    VC++ runtime install failed: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "    If PDFs don't work, install vc_redist.x64.exe manually from aka.ms/vs/17/release/vc_redist.x64.exe" -ForegroundColor Yellow
+}
+
 # --- 1. Python -------------------------------------------------------------
 Refresh-Path
 if (-not (Have python)) {
