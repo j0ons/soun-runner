@@ -74,23 +74,30 @@ if (-not (Have python)) {
 }
 
 # --- 2. Git ----------------------------------------------------------------
+# We ALWAYS resolve git to a full path (never rely on bare "git" on PATH, which
+# is unreliable inside an `irm | iex` session).
 Refresh-Path
-if (-not (Have git)) {
-    Say "Installing Git ..."
-    # Portable, stable URL (MinGit) — no installer wizard.
+$git = $null
+$existing = Get-Command git -ErrorAction SilentlyContinue
+if ($existing) { $git = $existing.Source }
+
+if (-not $git) {
+    Say "Installing Git (portable MinGit) ..."
     $gitZip = Join-Path $dl "mingit.zip"
     Get-File "https://github.com/git-for-windows/git/releases/download/v2.47.1.windows.1/MinGit-2.47.1-64-bit.zip" $gitZip
     $gitDir = Join-Path $work "_sr_git"
     if (Test-Path $gitDir) { Remove-Item $gitDir -Recurse -Force }
     Expand-Archive -Path $gitZip -DestinationPath $gitDir -Force
-    $env:Path = "$gitDir\cmd;$env:Path"
-} else { Say "Git already present." Green }
-
-$git = "git"
-if (-not (Have git)) {
-    $gc = Get-ChildItem -Path (Join-Path $work "_sr_git") -Filter git.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($gc) { $git = $gc.FullName } else { throw "Git not found after install." }
+    # MinGit ships git.exe at cmd\git.exe — resolve the real file, don't trust PATH.
+    $gc = Get-ChildItem -Path $gitDir -Filter git.exe -Recurse -ErrorAction SilentlyContinue |
+          Where-Object { $_.FullName -match '\\cmd\\git\.exe$' } | Select-Object -First 1
+    if (-not $gc) {
+        $gc = Get-ChildItem -Path $gitDir -Filter git.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
+    if ($gc) { $git = $gc.FullName } else { throw "Git not found after extracting MinGit." }
+    $env:Path = "$(Split-Path $git);$env:Path"
 }
+Say "Using git: $git" Green
 
 # --- 3. Nmap (SILENT — no wizard, installs Npcap automatically) -------------
 if (-not (Test-Path "C:\Program Files (x86)\Nmap\nmap.exe") -and -not (Test-Path "C:\Program Files\Nmap\nmap.exe")) {
@@ -100,9 +107,25 @@ if (-not (Test-Path "C:\Program Files (x86)\Nmap\nmap.exe") -and -not (Test-Path
         Get-File "https://nmap.org/dist/nmap-7.95-setup.exe" $nm
         # /S = NSIS silent install; Nmap's installer silently installs Npcap too.
         Start-Process -FilePath $nm -ArgumentList "/S" -Wait
-        Refresh-Path
-        if (Test-Path "C:\Program Files (x86)\Nmap\nmap.exe") { Say "Nmap installed." Green }
-        else { Write-Host "    Nmap silent install finished but binary not found — scans may need a manual install." -ForegroundColor Yellow }
+        # The installer can return before files settle; poll for the binary.
+        $nmapExe = $null
+        foreach ($try in 1..10) {
+            foreach ($p in "C:\Program Files (x86)\Nmap\nmap.exe","C:\Program Files\Nmap\nmap.exe") {
+                if (Test-Path $p) { $nmapExe = $p; break }
+            }
+            if ($nmapExe) { break }
+            Start-Sleep 1
+        }
+        if ($nmapExe) {
+            Say "Nmap installed: $nmapExe" Green
+            # Ensure its folder is on PATH for this session so the app finds it.
+            $env:Path = "$(Split-Path $nmapExe);$env:Path"
+        } else {
+            Write-Host "    Nmap not detected after silent install. Trying interactive installer (click through, allow Npcap)..." -ForegroundColor Yellow
+            Start-Process -FilePath $nm -Wait
+            if (Test-Path "C:\Program Files (x86)\Nmap\nmap.exe") { Say "Nmap installed." Green }
+            else { Write-Host "    Nmap still not found — scans need it; install manually from nmap.org. (PDF/reports work regardless.)" -ForegroundColor Yellow }
+        }
     } catch {
         Write-Host "    Nmap install failed — install later from nmap.org. (PDF/reports still work; only scanning needs it.)" -ForegroundColor Yellow
     }
