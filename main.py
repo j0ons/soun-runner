@@ -52,4 +52,20 @@ if __name__ == "__main__":
 
     threading.Thread(target=open_browser, daemon=True).start()
 
+    # Soun Runner is a local single-operator tool bound to 127.0.0.1, not a
+    # public service — silence Flask/Werkzeug's "development server" banner so the
+    # console stays clean in front of clients. Our own banner above already shows
+    # the URL; request logs stay on. (log_startup prints both the warning and the
+    # "Running on" line, so we no-op it entirely.)
+    try:
+        import flask.cli
+        flask.cli.show_server_banner = lambda *a, **k: None
+    except Exception:
+        pass
+    try:
+        from werkzeug.serving import BaseWSGIServer
+        BaseWSGIServer.log_startup = lambda self: None
+    except Exception:
+        pass
+
     app.run(host=HOST, port=PORT, debug=False, use_reloader=False)

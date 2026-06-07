@@ -202,6 +202,25 @@ if (-not (Test-Path (Join-Path $proj "main.py"))) {
 }
 Good "Project ready: $proj"
 
+# Drop an UPDATE.bat that knows where git + python live, so updating later
+# never hits "git not recognized". Double-click it (or run from cmd) to pull
+# the latest code and relaunch.
+try {
+    $updateBat = @"
+@echo off
+title Soun Runner - Update ^& Run
+cd /d "%~dp0"
+echo Updating Soun Runner from GitHub...
+"$git" pull
+echo.
+echo Starting Soun Runner...
+"$python" main.py
+pause
+"@
+    Set-Content -Path (Join-Path $proj "UPDATE.bat") -Value $updateBat -Encoding ASCII
+    Good "Created UPDATE.bat (double-click it later to update + run)."
+} catch { }
+
 # --- 5. Python deps + Chromium --------------------------------------------
 Say "Installing Python dependencies ..."
 & $python -m pip install --upgrade pip
