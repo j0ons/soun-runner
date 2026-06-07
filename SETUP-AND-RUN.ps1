@@ -137,35 +137,42 @@ if (-not $git) {
 Good "Using git: $git"
 
 # --- 3. Nmap -----------------------------------------------------------------
-# Soun Runner uses unprivileged TCP-connect scans, which work WITHOUT the Npcap
-# raw-packet driver. So we install Nmap's own files (nmap.exe is what matters)
-# and don't depend on Npcap. We try silent first; if nmap.exe doesn't appear we
-# fall back to the interactive installer brought to the foreground.
+# IMPORTANT: Nmap's installer REFUSES to install silently (/S) unless Npcap is
+# already present ("Silent installation of Nmap requires the Npcap packet
+# capturing software"). And the FREE Npcap installer has no silent mode either.
+# But Soun Runner only does unprivileged TCP-connect scans, which do NOT need
+# Npcap at all. So: try silent only if Npcap already exists; otherwise open the
+# interactive installer and tell the operator they can UNCHECK Npcap (one quick
+# click-through). This is the reliable path on a fresh machine.
 function Find-Nmap {
     foreach ($p in "C:\Program Files (x86)\Nmap\nmap.exe","C:\Program Files\Nmap\nmap.exe") {
         if (Test-Path $p) { return $p }
     }
     return $null
 }
+$npcapPresent = (Test-Path "C:\Program Files\Npcap") -or (Test-Path "C:\Windows\System32\Npcap") -or (Test-Path "C:\Windows\System32\wpcap.dll")
 $nmapExe = Find-Nmap
 if (-not $nmapExe) {
     Say "Installing Nmap ..."
     $nm = Join-Path $dl "nmap-setup.exe"
     if (Get-File "https://nmap.org/dist/nmap-7.95-setup.exe" $nm) {
-        # Attempt 1: fully silent.
-        Write-Host "    attempting silent install (/S) ..."
-        Start-Process -FilePath $nm -ArgumentList "/S" -Wait
-        foreach ($t in 1..15) { $nmapExe = Find-Nmap; if ($nmapExe) { break }; Start-Sleep 1 }
-
-        # Attempt 2: interactive (Npcap's silent install often blocks /S on a
-        # fresh machine). Bring it to the front with a clear instruction.
+        if ($npcapPresent) {
+            Write-Host "    Npcap present - attempting silent install (/S) ..."
+            Start-Process -FilePath $nm -ArgumentList "/S" -Wait
+            foreach ($t in 1..15) { $nmapExe = Find-Nmap; if ($nmapExe) { break }; Start-Sleep 1 }
+        }
         if (-not $nmapExe) {
-            Warn "Silent install didn't complete. Opening the Nmap installer window now."
-            Warn "==> In the installer: click 'I Agree' / 'Next' through every screen, then Finish."
-            Warn "    (If an 'Npcap' screen appears, just click through it - Soun Runner does not require it.)"
+            Write-Host ""
+            Write-Host "  ===========================================================" -ForegroundColor Yellow
+            Write-Host "   ACTION NEEDED: the Nmap installer window is opening." -ForegroundColor Yellow
+            Write-Host "   Click 'I Agree' / 'Next' through the screens, then 'Install'." -ForegroundColor Yellow
+            Write-Host "   TIP: on the components screen you may UNCHECK 'Npcap' -" -ForegroundColor Yellow
+            Write-Host "        Soun Runner does not need it. Then finish the wizard." -ForegroundColor Yellow
+            Write-Host "  ===========================================================" -ForegroundColor Yellow
+            Write-Host ""
             Start-Process -FilePath $nm
-            # Wait up to 4 minutes for the operator to click through.
-            foreach ($t in 1..240) { $nmapExe = Find-Nmap; if ($nmapExe) { break }; Start-Sleep 1 }
+            Write-Host "    waiting for Nmap to finish installing (up to 5 min) ..."
+            foreach ($t in 1..300) { $nmapExe = Find-Nmap; if ($nmapExe) { break }; Start-Sleep 1 }
         }
     }
 }
