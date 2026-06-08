@@ -235,16 +235,30 @@ function append(lines) {
   t.scrollTop = t.scrollHeight;
 }
 
+function updateCounts(s) {
+  document.getElementById('cHosts').textContent = s.hosts || 0;
+  document.getElementById('cPorts').textContent = s.ports || 0;
+  document.getElementById('cFind').textContent = s.findings || 0;
+  document.getElementById('cCrit').textContent = s.critical || 0;
+}
+
+// Refresh the counters when returning to this tab (e.g. after changing a
+// finding's severity in the Workspace) so the badges never show stale numbers.
+function refreshStats() {
+  fetch('/status/' + jobId).then(r => r.json()).then(data => {
+    updateCounts(data.stats || {});
+  }).catch(()=>{});
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshStats(); });
+window.addEventListener('focus', refreshStats);
+window.addEventListener('pageshow', refreshStats);
+
 function doPoll() {
   fetch('/status/' + jobId).then(r => r.json()).then(data => {
     const nl = data.log.slice(lastLen);
     if (nl.length) { append(nl); lastLen = data.log.length; }
 
-    const s = data.stats || {};
-    document.getElementById('cHosts').textContent = s.hosts || 0;
-    document.getElementById('cPorts').textContent = s.ports || 0;
-    document.getElementById('cFind').textContent = s.findings || 0;
-    document.getElementById('cCrit').textContent = s.critical || 0;
+    updateCounts(data.stats || {});
 
     if (data.status === 'done') {
       clearInterval(poll);
