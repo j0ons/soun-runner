@@ -102,6 +102,11 @@ body { font-family:var(--sans); background:var(--bg); color:var(--txt); min-heig
 .fix-hd h3 { font-size:0.95rem; color:var(--txt); margin:0; }
 .fix-x { cursor:pointer; color:var(--dim); font-size:1.2rem; }
 .fix-bd { padding:1.25rem; }
+.loc-badge { display:inline-block; font-size:0.72rem; font-weight:700; padding:0.35rem 0.7rem; border-radius:5px; margin-bottom:0.6rem; letter-spacing:0.03em; }
+.loc-badge.loc-local { background:#0e2a18; color:#5ee08f; border:1px solid #1f6a3c; }
+.loc-badge.loc-remote { background:#2a1e0c; color:#ffb14d; border:1px solid #6a4a1a; }
+.loc-badge.loc-na { background:#16202c; color:#7fb0d0; border:1px solid #2a4256; }
+.fix-hint { font-size:0.76rem; color:#bcd; background:#0a1822; border-left:3px solid #2a5a7a; padding:0.55rem 0.75rem; border-radius:0 5px 5px 0; margin-bottom:0.7rem; }
 .fix-sum { color:#9fc2d4; font-size:0.82rem; margin-bottom:0.75rem; }
 .fix-warn { background:#2a1416; border:1px solid #6a2a2e; color:#ff9a9a; padding:0.7rem 0.9rem; border-radius:6px; font-size:0.76rem; margin-bottom:0.9rem; }
 .fix-steps { font-size:0.76rem; color:var(--dim); margin:0 0 0.9rem 1.1rem; line-height:1.5; }
@@ -330,7 +335,17 @@ function openFix(key) {
       return;
     }
     titleEl.textContent = fx.title + '  —  ' + (fx.host || 'target') + (fx.port ? (':' + fx.port) : '');
-    let html = '<div class="fix-sum">' + esc(fx.summary) + '</div>';
+    let html = '';
+    // Location badge: is this finding on THIS machine or a remote host?
+    if (fx.location === 'local') {
+      html += '<div class="loc-badge loc-local">● LOCAL HOST — runs on this machine</div>';
+    } else if (fx.location === 'remote') {
+      html += '<div class="loc-badge loc-remote">● REMOTE HOST (' + esc(fx.host) + ') — run the script on that host</div>';
+    } else {
+      html += '<div class="loc-badge loc-na">● CONFIG CHANGE — apply at the DNS/web/device system</div>';
+    }
+    if (fx.run_hint) html += '<div class="fix-hint">' + esc(fx.run_hint) + '</div>';
+    html += '<div class="fix-sum">' + esc(fx.summary) + '</div>';
     if (fx.warnings && fx.warnings.length) {
       fx.warnings.forEach(w => { html += '<div class="fix-warn">⚠ ' + esc(w) + '</div>'; });
     }

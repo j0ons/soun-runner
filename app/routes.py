@@ -288,6 +288,7 @@ def fix_list(job_id: str):
             "port": fx.port, "platform": fx.platform, "language": fx.language,
             "summary": fx.summary, "steps": fx.steps, "warnings": fx.warnings,
             "note": fx.note, "fix_script": fx.fix_script, "rollback_script": fx.rollback_script,
+            "location": fx.location, "run_hint": fx.run_hint,
         })
     return jsonify({"fixes": out, "count": len(out)})
 

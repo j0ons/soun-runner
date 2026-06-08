@@ -22,9 +22,53 @@ ordering/effort logic in runbook.
 
 from __future__ import annotations
 
+import socket
 from dataclasses import dataclass, field
 
 TAG = "SounRunner"  # marker prefix for any artifacts we create on the target
+
+
+def _local_ips() -> set:
+    """Best-effort set of IP addresses that belong to THIS machine, so we can
+    tell whether a finding's host is local (fix runs here) or remote (needs a
+    remote transport / manual run on the target)."""
+    ips = {"127.0.0.1", "::1", "localhost"}
+    try:
+        host = socket.gethostname()
+        ips.add(host.lower())
+        for res in socket.getaddrinfo(host, None):
+            ips.add(res[4][0])
+    except Exception:
+        pass
+    # The address used to reach the internet (the primary outbound IP).
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ips.add(s.getsockname()[0])
+        s.close()
+    except Exception:
+        pass
+    return {str(i).lower() for i in ips}
+
+
+def host_is_local(host: str, local_ips: set | None = None) -> bool:
+    """True if `host` refers to the machine Soun Runner is running on."""
+    if not host:
+        return False
+    h = str(host).strip().lower()
+    if h in ("", "network", "manual"):
+        return False
+    li = local_ips if local_ips is not None else _local_ips()
+    if h in li:
+        return True
+    # hostname like 'WS01' or 'box.mshome.net' that resolves to a local IP
+    try:
+        for res in socket.getaddrinfo(h, None):
+            if res[4][0].lower() in li:
+                return True
+    except Exception:
+        pass
+    return False
 
 
 @dataclass
@@ -41,10 +85,24 @@ class FixScript:
     steps: list = field(default_factory=list)     # human-readable bullet steps
     warnings: list = field(default_factory=list)  # safety warnings (may be empty)
     note: str = ""                   # extra context
+    location: str = "unknown"        # "local" | "remote" | "n/a" (DNS/manual)
 
     @property
     def has_warnings(self) -> bool:
         return bool(self.warnings)
+
+    @property
+    def run_hint(self) -> str:
+        """How to actually run this fix, given where the host is."""
+        if self.location == "local":
+            return ("This finding is on THIS machine. You can run the fix script "
+                    "here directly in an elevated PowerShell.")
+        if self.location == "remote":
+            return (f"This finding is on a REMOTE host ({self.host}). Run the fix "
+                    "script ON that host (via console/RDP/AnyDesk), or push it with "
+                    "your remote-admin tool. Soun Runner does not execute it remotely.")
+        return ("This is a configuration change (DNS / web server / device) - apply "
+                "it at the relevant system per the steps.")
 
     @property
     def fix_filename(self) -> str:
@@ -449,56 +507,73 @@ def _tls_fix(finding) -> FixScript:
 _WIN_FEATURE = {23: "TelnetClient", 21: "IIS-FTPServer"}
 
 
-def generate_fix(finding, domain: str = "") -> FixScript | None:
+def _classify_location(fx: "FixScript", finding, local_ips: set | None) -> None:
+    """Tag the fix as local/remote/n-a based on where the finding's host is."""
+    if fx.platform in ("dns", "manual"):
+        fx.location = "n/a"
+        return
+    if host_is_local(getattr(finding, "host", ""), local_ips):
+        fx.location = "local"
+    else:
+        fx.location = "remote"
+        # Add an explicit note so the operator knows it won't auto-run remotely.
+        if not any("REMOTE host" in w for w in fx.warnings):
+            fx.warnings.append(
+                f"This host ({fx.host}) is NOT the machine Soun Runner is running on. "
+                "Apply the fix ON that host (console/RDP/AnyDesk) - it will not run there automatically."
+            )
+
+
+def generate_fix(finding, domain: str = "", local_ips: set | None = None) -> "FixScript | None":
     """Map a single finding to a FixScript, or None if we have no recipe for it.
 
     `finding` is anything with .risk/.title/.host/.port/.service/.category
-    attributes (the report Finding dataclass, or a duck-typed object).
+    attributes. The result is tagged .location = local|remote|n/a so the caller
+    knows whether the fix runs on this machine or on a remote host.
     """
     cat = (getattr(finding, "category", "") or "").lower()
     port = int(getattr(finding, "port", 0) or 0)
     title = (getattr(finding, "title", "") or "").lower()
     svc = _PORT_NAME.get(port, getattr(finding, "service", "") or f"port {port}")
 
+    fx = None
     # Email / DNS
     if cat == "email" or any(k in title for k in ("spf", "dkim", "dmarc", "email security")):
-        return _email_fix(finding, domain)
-
+        fx = _email_fix(finding, domain)
     # SSL / TLS
-    if cat == "ssl" or any(k in title for k in ("ssl", "tls", "cipher", "certificate", "hsts")):
-        return _tls_fix(finding)
-
+    elif cat == "ssl" or any(k in title for k in ("ssl", "tls", "cipher", "certificate", "hsts")):
+        fx = _tls_fix(finding)
     # Default credentials
-    if cat == "cred" or "default credential" in title:
-        return _default_creds_fix(finding)
-
+    elif cat == "cred" or "default credential" in title:
+        fx = _default_creds_fix(finding)
     # SNMP
-    if port == 161 or "snmp" in title:
-        return _snmp_fix(finding)
-
+    elif port == 161 or "snmp" in title:
+        fx = _snmp_fix(finding)
     # Service/port-based fixes
-    if port == 3389:
-        return _rdp_harden_windows(finding)
-    if port in (139, 445):
-        return _smb_harden_windows(finding)
-    if port in _WIN_FEATURE:
-        return _disable_service_windows(finding, port, svc, _WIN_FEATURE[port])
-    if port in (1433, 1521, 3306, 5432, 6379, 9200, 27017, 27018):
-        return _db_restrict(finding, port, svc)
-
+    elif port == 3389:
+        fx = _rdp_harden_windows(finding)
+    elif port in (139, 445):
+        fx = _smb_harden_windows(finding)
+    elif port in _WIN_FEATURE:
+        fx = _disable_service_windows(finding, port, svc, _WIN_FEATURE[port])
+    elif port in (1433, 1521, 3306, 5432, 6379, 9200, 27017, 27018):
+        fx = _db_restrict(finding, port, svc)
     # Generic exposed service -> firewall block (only if we know the port)
-    if port and cat in ("network", "config", "web", "validation"):
-        return _fw_block_windows(finding, port, svc)
+    elif port and cat in ("network", "config", "web", "validation"):
+        fx = _fw_block_windows(finding, port, svc)
 
-    return None
+    if fx is not None:
+        _classify_location(fx, finding, local_ips)
+    return fx
 
 
 def generate_all(findings, domain: str = "") -> list:
     """Generate fixes for every finding we have a recipe for (deduped by host+port+title)."""
     seen = set()
     out = []
+    local_ips = _local_ips()  # compute once for all findings
     for f in findings:
-        fx = generate_fix(f, domain)
+        fx = generate_fix(f, domain, local_ips=local_ips)
         if not fx:
             continue
         key = (fx.host, fx.port, fx.title)
