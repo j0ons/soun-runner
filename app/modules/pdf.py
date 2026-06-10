@@ -16,9 +16,13 @@ no admin install). WeasyPrint is kept as a fallback so existing setups that
 already have it keep working unchanged.
 
 Engine order:
-    1. Playwright (headless Chromium)   ← preferred, fully portable
-    2. WeasyPrint                       ← fallback, needs GTK
-    3. give up gracefully → report stays HTML-only
+    1. Playwright — bundled/downloaded Chromium, else the machine's own
+       Edge/Chrome via channel= (every Windows 10/11 box ships Edge, so this
+       works with NO browser download)
+    2. Edge/Chrome headless CLI         ← stdlib-only safety net: works even
+       when pip/Playwright failed entirely
+    3. WeasyPrint                       ← legacy fallback, needs GTK
+    4. give up gracefully → report stays HTML-only
 
 `render_pdf()` never raises: it returns True on success, False otherwise, so
 callers can keep their existing "HTML report still works without a PDF" path.
@@ -127,7 +131,19 @@ def _render_with_playwright(html: str, out_path: str) -> bool:
 
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(args=["--no-sandbox"])
+            # Bundled/downloaded Chromium first; if it was never downloaded,
+            # drive the machine's own Edge/Chrome through the same engine —
+            # identical output, zero download.
+            browser = None
+            launch_exc: Exception | None = None
+            for kwargs in ({}, {"channel": "msedge"}, {"channel": "chrome"}):
+                try:
+                    browser = p.chromium.launch(args=["--no-sandbox"], **kwargs)
+                    break
+                except Exception as exc:
+                    launch_exc = exc
+            if browser is None:
+                raise launch_exc if launch_exc else RuntimeError("no Chromium-based browser available")
             try:
                 page = browser.new_page()
                 # All assets are inline (base64 data-URIs) — there is no real
@@ -151,6 +167,127 @@ def _render_with_playwright(html: str, out_path: str) -> bool:
         else:
             _LAST_ERROR = f"Chromium render failed: {msg}"
         return False
+
+
+def _find_system_browser() -> str | None:
+    """Path to the machine's own Edge/Chrome/Chromium, or None."""
+    import shutil
+
+    if sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA", "")
+        cands = [
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            os.path.join(local, r"Google\Chrome\Application\chrome.exe") if local else "",
+        ]
+    elif sys.platform == "darwin":
+        cands = [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        ]
+    else:
+        cands = [shutil.which(n) or "" for n in
+                 ("google-chrome", "chromium", "chromium-browser", "microsoft-edge")]
+    for cand in cands:
+        if cand and os.path.exists(cand):
+            return cand
+    return None
+
+
+def _render_with_browser_cli(html: str, out_path: str) -> bool:
+    """Render with the machine's own Edge/Chrome via --print-to-pdf.
+
+    This is the safety net that keeps PDFs working on locked-down client
+    machines: it needs NO downloads and NO Python packages beyond the stdlib.
+    Every Windows 10/11 machine ships Microsoft Edge.
+    """
+    global _LAST_ERROR
+    browser = _find_system_browser()
+    if not browser:
+        _LAST_ERROR = "No system browser (Edge/Chrome) found for PDF rendering."
+        return False
+
+    import shutil
+    import subprocess
+    import tempfile
+
+    # The CLI cannot take margin/format options; inject @page CSS so the
+    # output matches the Playwright engine's A4 + margins.
+    page_css = "<style>@page{size:A4;margin:14mm 12mm 16mm 12mm}</style>"
+    if "</head>" in html:
+        html_cli = html.replace("</head>", page_css + "</head>", 1)
+    else:
+        html_cli = page_css + html
+
+    import time
+
+    tmpdir = tempfile.mkdtemp(prefix="sr_pdf_")
+    try:
+        src = os.path.join(tmpdir, "report.html")
+        with open(src, "w", encoding="utf-8") as fh:
+            fh.write(html_cli)
+        # A private profile dir keeps headless rendering independent of any
+        # Edge/Chrome window the operator has open (the default profile is
+        # locked while the browser is running).
+        profile = os.path.join(tmpdir, "profile")
+        # --headless=new is safe everywhere: builds that don't know the "new"
+        # value just run classic headless. Pass BOTH no-header spellings (the
+        # flag was renamed across Chromium versions); unknown flags are ignored.
+        for headless_flag in ("--headless=new", "--headless"):
+            try:
+                if os.path.exists(out_path):
+                    os.remove(out_path)
+            except Exception:
+                pass
+            cmd = [
+                browser, headless_flag, "--disable-gpu", "--no-sandbox",
+                "--no-first-run", "--no-default-browser-check",
+                f"--user-data-dir={profile}",
+                "--no-pdf-header-footer", "--print-to-pdf-no-header",
+                f"--print-to-pdf={out_path}",
+                Path(src).as_uri(),
+            ]
+            # Some builds write the PDF but never exit, so don't wait on the
+            # process: poll for the output file, then put the browser down
+            # ourselves once the file has stopped growing.
+            try:
+                proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                                        stderr=subprocess.DEVNULL)
+            except Exception as exc:
+                _LAST_ERROR = f"System browser failed to launch: {exc}"
+                continue
+            deadline = time.time() + 75
+            last_size, stable = -1, 0
+            try:
+                while time.time() < deadline:
+                    if os.path.exists(out_path):
+                        size = os.path.getsize(out_path)
+                        if size > 1000 and size == last_size:
+                            stable += 1
+                            if stable >= 2:
+                                break
+                        else:
+                            stable = 0
+                        last_size = size
+                    elif proc.poll() is not None:
+                        break  # browser exited without producing a file
+                    time.sleep(0.5)
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    try:
+                        proc.wait(timeout=10)
+                    except Exception:
+                        pass
+            if os.path.exists(out_path) and os.path.getsize(out_path) > 1000:
+                return True
+            _LAST_ERROR = "System browser produced no PDF within 75s."
+        return False
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def _render_with_weasyprint(html: str, out_path: str) -> bool:
@@ -213,12 +350,16 @@ def render_pdf(html: str, out_path: str | os.PathLike) -> bool:
 
     # Try the cached engine first (if any), then probe in priority order —
     # without launching the same engine twice in a row.
-    order = ["playwright", "weasyprint"]
+    order = ["playwright", "browser", "weasyprint"]
     if _ENGINE in order:
         order.remove(_ENGINE)
         order.insert(0, _ENGINE)
 
-    engines = {"playwright": _render_with_playwright, "weasyprint": _render_with_weasyprint}
+    engines = {
+        "playwright": _render_with_playwright,
+        "browser": _render_with_browser_cli,
+        "weasyprint": _render_with_weasyprint,
+    }
     for name in order:
         if engines[name](html, tmp_path) and _promote():
             _ENGINE = name
@@ -235,22 +376,26 @@ def render_pdf(html: str, out_path: str | os.PathLike) -> bool:
 
     _ENGINE = "none"
     if not _LAST_ERROR:
-        _LAST_ERROR = ("No PDF engine available. Run: pip install playwright "
-                       "&& playwright install chromium")
+        _LAST_ERROR = ("No PDF engine available (no Playwright, no Edge/Chrome, "
+                       "no WeasyPrint). Install any browser, or run: "
+                       "pip install playwright && playwright install chromium")
     return False
 
 
 def engine_name() -> str:
     """Best-effort name of the engine that will be used, for diagnostics.
 
-    Does not render anything; only checks importability (cheap). Returns one of
-    'chromium (playwright)', 'weasyprint', or 'none'.
+    Does not render anything; only checks importability / browser presence
+    (cheap). Returns 'chromium (playwright)', 'system browser (headless)',
+    'weasyprint', or 'none'.
     """
     try:
         import playwright.sync_api  # noqa: F401
         return "chromium (playwright)"
     except Exception:
         pass
+    if _find_system_browser():
+        return "system browser (headless)"
     try:
         with _quiet_output():
             import weasyprint  # noqa: F401

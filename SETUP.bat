@@ -20,7 +20,14 @@ echo   This will install everything needed and start the tool.
 echo   Keep this window open. A browser will open when ready.
 echo.
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/j0ons/soun-runner/main/SETUP-AND-RUN.ps1 | iex"
+REM Prefer the local copy of the setup script when it is next to this file
+REM (e.g. inside an already-cloned repo or on a USB stick); otherwise fetch
+REM the latest from GitHub.
+if exist "%~dp0SETUP-AND-RUN.ps1" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0SETUP-AND-RUN.ps1"
+) else (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/j0ons/soun-runner/main/SETUP-AND-RUN.ps1 | iex"
+)
 
 echo.
 echo   (If the tool stopped, this window can be closed.)

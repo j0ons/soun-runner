@@ -4,8 +4,12 @@ REM   SOUN RUNNER - One-click launcher (Windows)
 REM   Soun Al Hosn Cybersecurity LLC
 REM
 REM   Double-click this file to start Soun Runner.
-REM   It checks for Python + Nmap, installs Python packages
-REM   automatically, then opens the tool in your browser.
+REM   It finds a REAL Python (ignoring Windows' fake Microsoft
+REM   Store stub), installs Python packages, checks Nmap, then
+REM   opens the tool in your browser.
+REM
+REM   First time on a fresh machine? Run SETUP.bat instead -
+REM   it installs Python/Git/Nmap automatically.
 REM ============================================================
 setlocal enableextensions
 cd /d "%~dp0"
@@ -20,28 +24,48 @@ echo    SOUN RUNNER  -  Soun Al Hosn Cybersecurity
 echo  ===============================================
 echo.
 
-REM ---- 1. Check Python --------------------------------------
-where python >nul 2>&1
-if errorlevel 1 (
-    echo  [!] Python is not installed on this machine.
+REM ---- 1. Find a REAL Python --------------------------------
+REM Windows 10/11 ships a fake "python.exe" that just opens the
+REM Microsoft Store. It prints NOTHING to stdout, so asking Python
+REM to print its own path filters the fake out automatically.
+set "PY="
+
+REM Portable Python installed by SETUP-AND-RUN.ps1 (sits next to the repo)
+if exist "%~dp0..\_sr_python\python.exe" (
+    "%~dp0..\_sr_python\python.exe" -c "import sys" >nul 2>&1 && set "PY=%~dp0..\_sr_python\python.exe"
+)
+
+REM Normal PATH python - accepted only if it runs AND is 3.10+
+if not defined PY for /f "delims=" %%i in ('python -c "import sys;v=sys.version_info;v[0]==3 and v[1] in range(10,100) and print(sys.executable)" 2^>nul') do set "PY=%%i"
+
+REM The py launcher knows about real installs even when PATH is stale
+if not defined PY for /f "delims=" %%i in ('py -3 -c "import sys;v=sys.version_info;v[0]==3 and v[1] in range(10,100) and print(sys.executable)" 2^>nul') do set "PY=%%i"
+
+if not defined PY (
+    echo  [!] No working Python 3.10+ found on this machine.
     echo.
-    echo      Soun Runner needs Python 3.10 or newer.
-    echo      Install it once from:  https://www.python.org/downloads/
-    echo      IMPORTANT: tick "Add Python to PATH" during install.
+    echo      NOTE: the "python" that opens the Microsoft Store does NOT
+    echo      count - that is a Windows placeholder, not a real Python.
     echo.
-    echo      After installing, double-click this file again.
+    echo      EASIEST FIX: run SETUP.bat ^(next to this file^) - it installs
+    echo      everything automatically. Or install Python manually from
+    echo      https://www.python.org/downloads/ and tick "Add Python to PATH".
     echo.
     pause
     exit /b 1
 )
-echo  [ok] Python found.
+echo  [ok] Python found: %PY%
 
 REM ---- 2. Check / install Python packages -------------------
 echo  [..] Checking required Python packages...
-python -m pip install --quiet --disable-pip-version-check -r requirements.txt
+"%PY%" -m pip install --quiet --disable-pip-version-check -r requirements.txt
 if errorlevel 1 (
-    echo  [!] Could not install Python packages automatically.
-    echo      Check the internet connection and try again.
+    echo  [!] pip reported errors - verifying what actually installed...
+)
+"%PY%" -c "import flask" >nul 2>&1
+if errorlevel 1 (
+    echo  [!] Core packages are missing ^(Flask did not import^).
+    echo      Check the internet connection and try again, or run SETUP.bat.
     pause
     exit /b 1
 )
@@ -73,6 +97,6 @@ echo.
 echo  Keep this window open while you work.
 echo  Close this window (or press Ctrl+C) to stop the tool.
 echo.
-python main.py
+"%PY%" main.py
 
 pause

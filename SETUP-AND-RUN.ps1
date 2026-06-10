@@ -2,7 +2,7 @@
 #  SounRunner - one-shot setup & run for a Windows machine (incl. via AnyDesk).
 #
 #  Installs everything (VC++ runtime, Python, Git, Nmap), clones the repo,
-#  installs deps + Chromium, VERIFIES the whole chain, then launches the app.
+#  installs deps, VERIFIES the whole chain for real, then launches the app.
 #
 #  HOW TO RUN (PowerShell as Administrator):
 #     irm https://raw.githubusercontent.com/j0ons/soun-runner/main/SETUP-AND-RUN.ps1 | iex
@@ -24,7 +24,6 @@ $script:FAILS = @()
 function Say($msg, $color = "Cyan") { Write-Host "`n>>> $msg" -ForegroundColor $color }
 function Warn($msg) { Write-Host "    $msg" -ForegroundColor Yellow }
 function Good($msg) { Write-Host "    $msg" -ForegroundColor Green }
-function Have($cmd) { return [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 
 function Update-SessionPath {
     $m = [Environment]::GetEnvironmentVariable("Path", "Machine")
@@ -49,6 +48,98 @@ function Get-File($url, $out) {
     return $false
 }
 
+# ----------------------------------------------------------------------------
+# REAL-Python detection.
+#
+# Windows 10/11 ships a FAKE python.exe (an App Execution Alias under
+# ...\Microsoft\WindowsApps\) that just prints "Python was not found; run
+# without arguments to install from the Microsoft Store" and exits non-zero.
+# Checking "is python on PATH" therefore proves NOTHING. The only trustworthy
+# test is to RUN the candidate and require:  exit code 0  +  "Python 3.x" out,
+# with x >= 10 (the app uses 3.10+ syntax).
+# ----------------------------------------------------------------------------
+function Test-RealPython($exe) {
+    if (-not $exe) { return $false }
+    if (-not (Test-Path $exe)) { return $false }
+    try {
+        $out = (& $exe --version 2>&1 | Out-String).Trim()
+    } catch { return $false }
+    if ($LASTEXITCODE -ne 0) { return $false }
+    if ($out -match "^Python 3\.(\d+)") { return ([int]$Matches[1] -ge 10) }
+    return $false
+}
+
+# Try every plausible Python, newest sources first, and return the first one
+# that actually RUNS. Returns $null if none works.
+function Resolve-Python {
+    $cands = @()
+    # Portable Python installed by a previous run of this script.
+    $cands += (Join-Path $work "_sr_python\python.exe")
+    # Whatever PATH says (this is where the Store stub gets rejected).
+    $c = Get-Command python -ErrorAction SilentlyContinue
+    if ($c) { $cands += $c.Source }
+    # The py launcher knows about real installs even when PATH is stale.
+    $pyl = Get-Command py -ErrorAction SilentlyContinue
+    if ($pyl) {
+        try {
+            $exe = (& $pyl.Source -3 -c "import sys;print(sys.executable)" 2>$null | Out-String).Trim()
+            if ($exe) { $cands += $exe }
+        } catch { $null = $_ }
+    }
+    # Standard install locations (all-users and per-user).
+    foreach ($v in "312","313","311","310") {
+        $cands += "C:\Program Files\Python$v\python.exe"
+        $cands += "$env:LOCALAPPDATA\Programs\Python\Python$v\python.exe"
+    }
+    foreach ($cand in $cands) {
+        if (Test-RealPython $cand) { return $cand }
+    }
+    return $null
+}
+
+# Last-resort Python that needs NO admin rights and NO installer: the official
+# python.org "embeddable" zip, unpacked next to the project. Survives machines
+# where the MSI installer fails silently (no admin, group policy, AV).
+function Install-PortablePython {
+    Say "Installing portable Python 3.12 (no admin needed) ..."
+    $zip = Join-Path $dl "python-embed.zip"
+    if (-not (Get-File "https://www.python.org/ftp/python/3.12.7/python-3.12.7-embed-amd64.zip" $zip)) { return $null }
+    $dir = Join-Path $work "_sr_python"
+    if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+    Expand-Archive -Path $zip -DestinationPath $dir -Force
+    $exe = Join-Path $dir "python.exe"
+    if (-not (Test-Path $exe)) { return $null }
+    # The embeddable build ships with 'import site' disabled, which blocks pip.
+    $pth = Get-ChildItem -Path $dir -Filter "python3*._pth" | Select-Object -First 1
+    if ($pth) {
+        $content = Get-Content $pth.FullName
+        $content = $content -replace "^#\s*import\s+site", "import site"
+        Set-Content -Path $pth.FullName -Value $content -Encoding ASCII
+    }
+    # Bootstrap pip (the embeddable build has no ensurepip).
+    $gp = Join-Path $dl "get-pip.py"
+    if (-not (Get-File "https://bootstrap.pypa.io/get-pip.py" $gp)) { return $null }
+    & $exe $gp --no-warn-script-location
+    $pipOut = (& $exe -m pip --version 2>&1 | Out-String).Trim()
+    if ($pipOut -notmatch "^pip ") { Warn "pip bootstrap failed in portable Python."; return $null }
+    if (Test-RealPython $exe) { return $exe }
+    return $null
+}
+
+# The machine's own Chromium-based browser. Every Windows 10/11 box ships
+# Microsoft Edge, and the app can render PDFs through it headlessly - so the
+# 120 MB Chromium download becomes optional, not required.
+function Find-EdgeOrChrome {
+    foreach ($p in "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                   "C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+                   "C:\Program Files\Google\Chrome\Application\chrome.exe",
+                   "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                   "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe") {
+        if (Test-Path $p) { return $p }
+    }
+    return $null
+}
+
 # --- Pre-flight ------------------------------------------------------------
 Say "Soun Runner setup - pre-flight checks"
 
@@ -56,7 +147,7 @@ Say "Soun Runner setup - pre-flight checks"
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
            ).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
 if ($isAdmin) { Good "Running as Administrator." }
-else { Warn "NOT running as Administrator - installers may fail. Re-open PowerShell as Admin if anything below errors." }
+else { Warn "NOT running as Administrator - using per-user installs where possible." }
 
 # Internet?
 try {
@@ -72,45 +163,47 @@ Set-Location $work
 $dl = Join-Path $work "_sr_installers"
 New-Item -ItemType Directory -Force -Path $dl | Out-Null
 
-# --- 0. Visual C++ runtime (fixes greenlet/Playwright DLL load) ------------
-Say "Installing Microsoft Visual C++ runtime (needed by Playwright) ..."
+# --- 0. Visual C++ runtime (needed by greenlet/Playwright) ------------------
+Say "Installing Microsoft Visual C++ runtime ..."
 $vc = Join-Path $dl "vc_redist.x64.exe"
 if (Get-File "https://aka.ms/vs/17/release/vc_redist.x64.exe" $vc) {
     Start-Process -FilePath $vc -ArgumentList "/install","/quiet","/norestart" -Wait
     Good "VC++ runtime installed (or already present)."
 } else {
-    Warn "VC++ runtime download failed - PDFs may not work until it is installed."
+    Warn "VC++ runtime download failed - the Playwright PDF engine may not load (Edge fallback still works)."
     $script:FAILS += "VC++ runtime"
 }
 
-# --- 1. Python -------------------------------------------------------------
+# --- 1. Python (validated by EXECUTION, never by existence) ------------------
 Update-SessionPath
-if (-not (Have python)) {
+$python = Resolve-Python
+if ($python) {
+    Say "Python already present."
+} else {
     Say "Installing Python 3.12 ..."
     $py = Join-Path $dl "python-setup.exe"
     if (Get-File "https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe" $py) {
-        Start-Process -FilePath $py -ArgumentList "/quiet","InstallAllUsers=1","PrependPath=1","Include_pip=1" -Wait
+        # All-users needs admin; fall back to a per-user install otherwise.
+        if ($isAdmin) { $pyArgs = "/quiet","InstallAllUsers=1","PrependPath=1","Include_pip=1" }
+        else          { $pyArgs = "/quiet","InstallAllUsers=0","PrependPath=1","Include_pip=1" }
+        Start-Process -FilePath $py -ArgumentList $pyArgs -Wait
         Update-SessionPath
+        $python = Resolve-Python
     } else { $script:FAILS += "Python download" }
-} else { Say "Python already present." Green }
-
-# Resolve a python.exe full path (don't trust bare 'python' on PATH).
-$python = $null
-$pyCmd = Get-Command python -ErrorAction SilentlyContinue
-if ($pyCmd) { $python = $pyCmd.Source }
-if (-not $python) {
-    foreach ($p in "C:\Program Files\Python312\python.exe",
-                   "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
-                   "C:\Program Files\Python313\python.exe") {
-        if (Test-Path $p) { $python = $p; break }
+    if (-not $python) {
+        Warn "Standard Python install did not produce a working python.exe."
+        $python = Install-PortablePython
     }
 }
 if (-not $python) {
-    Write-Host "`nFATAL: Python is not installed and could not be located." -ForegroundColor Red
-    Write-Host "Open a NEW PowerShell (Admin) and re-run the one-liner." -ForegroundColor Red
+    Write-Host "`nFATAL: no working Python could be installed or located." -ForegroundColor Red
+    Write-Host "(Note: the 'python' that opens the Microsoft Store is a Windows" -ForegroundColor Red
+    Write-Host " placeholder, not a real Python - this script ignores it on purpose.)" -ForegroundColor Red
+    Write-Host "Check the internet connection and re-run this script." -ForegroundColor Red
     return
 }
 Good "Using python: $python"
+Good ((& $python --version 2>&1 | Out-String).Trim())
 
 # --- 2. Git (full-path resolve; portable MinGit if missing) ----------------
 Update-SessionPath
@@ -219,48 +312,76 @@ pause
 "@
     Set-Content -Path (Join-Path $proj "UPDATE.bat") -Value $updateBat -Encoding ASCII
     Good "Created UPDATE.bat (double-click it later to update + run)."
-} catch { }
+} catch { $null = $_ }
 
-# --- 5. Python deps + Chromium --------------------------------------------
+# --- 5. Python deps (verified by importing, not by pip's exit code) ---------
 Say "Installing Python dependencies ..."
-& $python -m pip install --upgrade pip
-& $python -m pip install -r requirements.txt
-
-Say "Installing Chromium for the PDF engine (~120 MB, one-time) ..."
-$chromeOk = $false
-for ($i = 1; $i -le 3; $i++) {
-    Write-Host "    playwright install chromium ($i/3) ..."
-    & $python -m playwright install chromium
-    $check = & $python -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); b=p.chromium.launch(); b.close(); p.stop(); print('PWOK')" 2>&1
-    if ($check -match "PWOK") { $chromeOk = $true; break }
-    Warn "Chromium not ready yet (attempt $i) - retrying ..."
+& $python -m pip install --upgrade pip --quiet --no-warn-script-location
+$reqs = Join-Path $proj "requirements.txt"
+foreach ($try in 1..2) {
+    & $python -m pip install -r $reqs --no-warn-script-location
+    if ($LASTEXITCODE -eq 0) { break }
+    Warn "pip install reported errors (attempt $try/2) - retrying ..."
     Start-Sleep 3
 }
-if ($chromeOk) { Good "PDF engine verified: Chromium launches." }
-else { Warn "Chromium could not be verified - PDFs may be unavailable (HTML reports still work)."; $script:FAILS += "Chromium/PDF" }
+# The app cannot start without Flask. Prove the import works - this is the
+# check that catches a fake/broken Python no matter what pip claimed.
+$depsOk = ((& $python -c "import flask; print('FLASKOK')" 2>&1 | Out-String) -match "FLASKOK")
+if ($depsOk) { Good "Python packages ready (Flask imports cleanly)." }
+else { Warn "Core Python packages did NOT install."; $script:FAILS += "Python packages" }
 
-# --- 6. Final verification summary -----------------------------------------
+# --- 6. PDF engine -----------------------------------------------------------
+# Preference order inside the app:
+#   1) Playwright Chromium (if downloaded)  2) the machine's own Edge/Chrome
+#   via Playwright  3) Edge/Chrome headless CLI  4) WeasyPrint  5) HTML-only.
+# Since every Windows 10/11 machine ships Edge, the 120 MB Chromium download
+# is only attempted when NO system browser exists.
+$sysBrowser = Find-EdgeOrChrome
+$pdfOk = $false
+if ($sysBrowser) {
+    Say "PDF engine: using this machine's own browser - no download needed."
+    Good "Found: $sysBrowser"
+    $pdfOk = $true
+} elseif ($depsOk) {
+    Say "No Edge/Chrome found - installing Chromium for the PDF engine (~120 MB, one-time) ..."
+    for ($i = 1; $i -le 3; $i++) {
+        Write-Host "    playwright install chromium ($i/3) ..."
+        & $python -m playwright install chromium
+        $check = & $python -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); b=p.chromium.launch(); b.close(); p.stop(); print('PWOK')" 2>&1
+        if ($check -match "PWOK") { $pdfOk = $true; break }
+        Warn "Chromium not ready yet (attempt $i) - retrying ..."
+        Start-Sleep 3
+    }
+    if ($pdfOk) { Good "PDF engine verified: Chromium launches." }
+    else { Warn "Chromium could not be verified - reports will fall back to HTML if no engine works."; $script:FAILS += "Chromium/PDF" }
+}
+
+# --- 7. Final verification summary (every check is REAL, not cosmetic) ------
 Say "Verification summary"
-$pyOk    = [bool]$python -and (Test-Path $python)
-$gitOk   = [bool]$git
-$nmapOk  = [bool]$nmapExe
-$projOk  = Test-Path (Join-Path $proj "main.py")
+$pyOk   = Test-RealPython $python
+$gitOk  = [bool]$git
+$nmapOk = [bool]$nmapExe
+$projOk = Test-Path (Join-Path $proj "main.py")
 function Mark($ok) { if ($ok) { "  [ OK ]" } else { "  [FAIL]" } }
-Write-Host ((Mark $pyOk)    + " Python")            -ForegroundColor ($(if($pyOk){"Green"}else{"Red"}))
-Write-Host ((Mark $gitOk)   + " Git")               -ForegroundColor ($(if($gitOk){"Green"}else{"Red"}))
-Write-Host ((Mark $nmapOk)  + " Nmap (scanning)")   -ForegroundColor ($(if($nmapOk){"Green"}else{"Yellow"}))
-Write-Host ((Mark $chromeOk)+ " Chromium (PDF)")    -ForegroundColor ($(if($chromeOk){"Green"}else{"Yellow"}))
-Write-Host ((Mark $projOk)  + " App files")         -ForegroundColor ($(if($projOk){"Green"}else{"Red"}))
+Write-Host ((Mark $pyOk)   + " Python (runs + version 3.10+)") -ForegroundColor ($(if($pyOk){"Green"}else{"Red"}))
+Write-Host ((Mark $depsOk) + " Python packages (Flask imports)") -ForegroundColor ($(if($depsOk){"Green"}else{"Red"}))
+Write-Host ((Mark $gitOk)  + " Git")               -ForegroundColor ($(if($gitOk){"Green"}else{"Red"}))
+Write-Host ((Mark $nmapOk) + " Nmap (scanning)")   -ForegroundColor ($(if($nmapOk){"Green"}else{"Yellow"}))
+Write-Host ((Mark $pdfOk)  + " PDF engine")        -ForegroundColor ($(if($pdfOk){"Green"}else{"Yellow"}))
+Write-Host ((Mark $projOk) + " App files")         -ForegroundColor ($(if($projOk){"Green"}else{"Red"}))
 
-if (-not ($pyOk -and $projOk)) {
-    Write-Host "`nCannot start: Python or app files are missing. Fix the [FAIL] items above and re-run." -ForegroundColor Red
+if (-not ($pyOk -and $projOk -and $depsOk)) {
+    Write-Host "`nCannot start: fix the [FAIL] items above and re-run this script." -ForegroundColor Red
+    if (-not $depsOk) {
+        Write-Host "Most common cause: no internet / proxy / antivirus blocking pip downloads." -ForegroundColor Red
+    }
     return
 }
 if ($script:FAILS.Count -gt 0) {
     Warn ("Non-fatal issues: " + ($script:FAILS -join ", ") + ". The app will still start.")
 }
 
-# --- 7. Run ----------------------------------------------------------------
+# --- 8. Run ----------------------------------------------------------------
 Say "Starting SounRunner - your browser will open at http://127.0.0.1:5757" Green
 Say "Leave this window open. Press Ctrl+C here to stop the app." Yellow
 & $python main.py
