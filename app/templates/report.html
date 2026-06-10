@@ -205,6 +205,19 @@ body {
   color: #cbd5e1;
   line-height: 1.8;
 }
+/* Arabic executive summary — RTL; its own page in the printed PDF */
+.arabic-summary {
+  direction: rtl;
+  text-align: right;
+  font-family: "Segoe UI", Tahoma, "Geeza Pro", "Noto Naskh Arabic", sans-serif;
+}
+.arabic-summary .exec-card { font-size: 0.98rem; line-height: 2.1; }
+.ar-risk-line { margin: 0.9rem 0 0.2rem; font-weight: 600; }
+.ar-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.8rem 0 0.2rem; }
+.ar-chip { border: 1px solid var(--border2); border-radius: 999px; padding: 0.25rem 0.85rem; font-size: 0.85rem; }
+.ar-subhead { color: #38bdf8; font-size: 0.95rem; font-weight: 700; margin: 1.1rem 0 0.2rem; }
+.ar-list { margin: 0.4rem 0 0.2rem; padding: 0 1.2rem 0 0; }
+.ar-list li { margin: 0.45rem 0; }
 
 /* ── Summary grid ───────────────────────────────────────────────────────── */
 .summary-grid {
@@ -724,6 +737,8 @@ table.data-table tbody tr:hover td { background: rgba(14,165,233,0.03); }
   .content { padding: 1.5rem 2rem; }
   .finding, .stat-card, .data-table-wrap, .cta-box, .exec-card { border-color: #e2e8f0 !important; background: #fff !important; }
   .disclaimer { background: #f8fafc; }
+  /* Arabic executive summary gets its own page for the decision-maker */
+  .arabic-summary { page-break-before: always; }
   .finding-body { display: block !important; }
   .finding-toggle { display: none; }
   /* Section-header emoji icons don't render in PDF — hide the glyph, keep the colored chip */
@@ -812,6 +827,42 @@ table.data-table tbody tr:hover td { background: rgba(14,165,233,0.03); }
       <h2>Executive Summary</h2>
     </div>
     <div class="exec-card">{{ r.executive_summary }}</div>
+  </div>
+  {% endif %}
+
+  <!-- Arabic Executive Summary (الملخص التنفيذي) -->
+  {% if r.arabic %}
+  <div class="section arabic-summary" dir="rtl" lang="ar">
+    <div class="section-hdr">
+      <div class="section-hdr-icon" style="background:#0b1a2e;color:#38bdf8;"></div>
+      <h2>الملخص التنفيذي</h2>
+    </div>
+    <div class="exec-card">
+      <p style="margin:0 0 .6rem">{{ r.arabic.intro }}</p>
+      {% if r.arabic.risk_line %}
+      <div class="ar-risk-line" style="color: {{ r.arabic.risk_color }}">{{ r.arabic.risk_line }}</div>
+      {% endif %}
+      {% if r.arabic.chips %}
+      <div class="ar-chips">
+        {% for label, count, color in r.arabic.chips %}
+        <span class="ar-chip" style="color: {{ color }}; border-color: {{ color }}55">{{ label }}: {{ count }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if r.arabic.highlights %}
+      <div class="ar-subhead">أبرز الملاحظات</div>
+      <ul class="ar-list">
+        {% for h in r.arabic.highlights %}<li>{{ h }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% if r.arabic.recommendations %}
+      <div class="ar-subhead">إجراءات عاجلة موصى بها</div>
+      <ul class="ar-list">
+        {% for rec in r.arabic.recommendations %}<li>{{ rec }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      <p style="margin:.9rem 0 0">{{ r.arabic.closing }}</p>
+    </div>
   </div>
   {% endif %}
 

@@ -128,6 +128,7 @@ class ReportData:
     executive_summary: str = ""
     engineer_notes: list[str] = field(default_factory=list)
     attack_paths: list[str] = field(default_factory=list)
+    arabic: object = None  # ArabicSummary | None — Arabic executive summary page
 
     @property
     def has_web_data(self) -> bool:
@@ -434,6 +435,8 @@ def build_report(
     report.executive_summary = _executive_summary(report)
     report.engineer_notes = _engineer_notes(report)
     report.attack_paths = _attack_paths(report, scan_result)
+    from app.modules.arabic import build_arabic_summary
+    report.arabic = build_arabic_summary(report)
 
     return report
 
