@@ -698,6 +698,15 @@ def wipe_app(job_id: str):
         _wiping = False
         return jsonify(result), 500
 
+    # Drop a sentinel in TEMP (outside the app dir, so it survives the wipe) so
+    # the Windows launcher knows this exit was a deliberate self-destruct and can
+    # close its console window instead of stopping at "Press any key".
+    try:
+        import tempfile
+        Path(tempfile.gettempdir(), "_sr_wiped").write_text("1", encoding="utf-8")
+    except Exception:
+        pass
+
     # Success: respond, then exit the process shortly after so the response
     # reaches the browser first. os._exit avoids Flask reloader/atexit hooks.
     def _shutdown():

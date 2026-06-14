@@ -133,10 +133,18 @@ del /f /q "%~f0" >NUL 2>&1
 
 
 def _delete_source_tree(project_dir: Path, keep: Path | None) -> None:
-    """Delete the project working dir (source-run wipe).
+    """Schedule deletion of the project working dir (source-run wipe).
 
-    Safety: refuse if the export (keep) is inside project_dir — it must be
-    elsewhere (it is: it's on the Desktop) so reports can't be deleted.
+    A running process CANNOT reliably delete its own directory: on Windows the
+    interpreter locks the current working directory and every loaded module/DLL,
+    so an in-process ``shutil.rmtree`` only partially succeeds (and silently, with
+    ignore_errors). So — exactly like the frozen .exe path — we hand the job to a
+    DETACHED cleaner that waits for THIS process to exit, then force-removes the
+    whole project directory. The export (``keep``) lives on the Desktop, outside
+    project_dir, so it is never in the delete target.
+
+    All the safety guards run HERE, before anything is scheduled, so a bad layout
+    aborts the wipe before any deletion command is spawned.
     """
     project_dir = Path(project_dir).resolve()
     if keep is not None:
@@ -147,17 +155,85 @@ def _delete_source_tree(project_dir: Path, keep: Path | None) -> None:
     if project_dir == Path.home().resolve() or project_dir.parent == project_dir:
         raise IOError("refusing to wipe an unsafe directory")
     # Allowlist guard: only delete something that actually LOOKS like this app,
-    # so an unexpected layout can never make us rmtree the wrong directory.
+    # so an unexpected layout can never make us remove the wrong directory.
     signature = ["main.py", "app", "requirements.txt"]
     if not all((project_dir / s).exists() for s in signature):
         raise IOError(
             f"refusing to wipe {project_dir}: it does not look like the SounRunner app "
             f"(missing one of {signature})"
         )
-    shutil.rmtree(project_dir, ignore_errors=True)
-    # Verify deletion actually completed; report failure rather than false success.
-    if project_dir.exists() and any(project_dir.iterdir()):
-        raise IOError(f"app directory could not be fully removed: {project_dir}")
+    _schedule_delete_dir(project_dir)
+
+
+def _schedule_delete_dir(project_dir: Path) -> None:
+    """Spawn a detached cleaner that waits for our PID to exit, then removes
+    ``project_dir`` in full. Windows uses a batch (cmd); POSIX uses a shell so
+    the operator can wipe a source run on a Mac/Linux test box too.
+    """
+    pid = os.getpid()
+    target = str(project_dir)
+
+    if sys.platform == "win32":
+        # Drop the cleaner OUTSIDE project_dir (in TEMP) so removing the project
+        # can't delete the running script out from under cmd.
+        import tempfile
+        bat = Path(tempfile.gettempdir()) / f"_sr_wipe_{pid}.bat"
+        # The running image for a source run is python.exe (or pythonw.exe);
+        # filter on it so the PID digits can't match elsewhere in tasklist output.
+        img = Path(sys.executable).name or "python.exe"
+        # Wait (bounded) for our PID to exit, then rmdir /s /q with bounded
+        # retries (the OS may hold the dir for a moment after we exit), then
+        # self-delete the batch. Bounded loops never spin forever.
+        script = f"""@echo off
+set /a tries=0
+:waitloop
+tasklist /FI "PID eq {pid}" /FI "IMAGENAME eq {img}" /NH 2>NUL | findstr /I "{img}" >NUL
+if errorlevel 1 goto delloop
+set /a tries+=1
+if %tries% GEQ 30 goto delloop
+timeout /t 1 /nobreak >NUL
+goto waitloop
+:delloop
+set /a dtries=0
+:delretry
+rmdir /s /q "{target}" >NUL 2>&1
+if not exist "{target}" goto done
+set /a dtries+=1
+if %dtries% GEQ 20 goto done
+timeout /t 1 /nobreak >NUL
+goto delretry
+:done
+del /f /q "%~f0" >NUL 2>&1
+"""
+        bat.write_text(script, encoding="utf-8")
+        DETACHED = 0x00000008          # DETACHED_PROCESS
+        CREATE_NO_WINDOW = 0x08000000
+        subprocess.Popen(
+            ["cmd", "/c", str(bat)],
+            cwd=str(bat.parent),       # NOT inside the dir we're about to delete
+            creationflags=DETACHED | CREATE_NO_WINDOW,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            close_fds=True,
+        )
+    else:
+        # POSIX (Mac/Linux source-run test machines): a detached shell waits for
+        # our PID to exit, then rm -rf the project dir. cwd is /, never the target.
+        sh = (
+            f"i=0; while kill -0 {pid} 2>/dev/null && [ $i -lt 30 ]; do "
+            f"sleep 1; i=$((i+1)); done; rm -rf {_sh_quote(target)}"
+        )
+        subprocess.Popen(
+            ["/bin/sh", "-c", sh],
+            cwd="/",
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,    # fully detach from this process group
+            close_fds=True,
+        )
+
+
+def _sh_quote(path: str) -> str:
+    """Single-quote a path for safe use in a /bin/sh -c command."""
+    return "'" + path.replace("'", "'\\''") + "'"
 
 
 def wipe(reports_dir: Path, stamp: str) -> dict:
@@ -190,9 +266,10 @@ def wipe(reports_dir: Path, stamp: str) -> dict:
                 "count": count, "mode": "frozen" if _is_frozen() else "source",
                 "message": f"Reports saved, but app cleanup failed: {exc}"}
 
-    # Frozen deletion happens in a detached batch AFTER this process exits, so
-    # it isn't confirmed yet; source deletion already completed synchronously.
-    removed = "App will remove itself after this window closes." if mode == "frozen" else "App removed."
+    # Both paths now delete via a DETACHED cleaner that fires AFTER this process
+    # exits (a running process can't reliably delete its own files on Windows),
+    # so removal isn't confirmed at response time — it's scheduled and trusted.
+    removed = "App will remove itself once this window closes."
     saved = (f"{count} report file(s) saved to {export_path}."
              if export_path else "No reports found to save.")
     return {"ok": True, "export_path": str(export_path) if export_path else None,

@@ -97,6 +97,21 @@ echo.
 echo  Keep this window open while you work.
 echo  Close this window (or press Ctrl+C) to stop the tool.
 echo.
+REM Clear any stale wipe sentinel from a previous run before launching.
+del /f /q "%TEMP%\_sr_wiped" >nul 2>&1
+
 "%PY%" main.py
+
+REM If a Finish & Wipe ran, the app dropped a sentinel in TEMP. In that case the
+REM project folder is being removed by a detached cleaner — close this window
+REM instead of pausing (and don't leave a "press any key" on a half-gone app).
+if exist "%TEMP%\_sr_wiped" (
+    del /f /q "%TEMP%\_sr_wiped" >nul 2>&1
+    echo.
+    echo  SounRunner has finished and is removing itself from this machine.
+    echo  Your reports were saved to a folder on the Desktop.
+    timeout /t 4 /nobreak >nul
+    exit
+)
 
 pause
