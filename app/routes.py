@@ -119,8 +119,10 @@ def workspace(job_id: str):
     hosts = []
     if rd is not None:
         for h in getattr(rd, "host_rows", []):
+            hn = getattr(h, "hostname", "") or ""
             hosts.append({"ip": h.ip, "device": h.device_type, "risk": h.risk,
-                          "ports": h.ports, "is_gateway": h.is_gateway})
+                          "ports": h.ports, "is_gateway": h.is_gateway,
+                          "hostname": (hn if hn and hn != h.ip else "")})
     findings = []
     if rd is not None:
         triage = job.get("triage", {})
