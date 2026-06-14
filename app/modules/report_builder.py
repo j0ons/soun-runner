@@ -277,8 +277,8 @@ def build_report(
             continue
         report.findings.append(Finding(
             risk=svc.risk,
-            title=f"{RISK_LABEL.get(svc.risk, 'Risk')}: {svc.name or f'Port {svc.port}'} exposed on {host.display_name}",
-            host=host.display_name,
+            title=f"{RISK_LABEL.get(svc.risk, 'Risk')}: {svc.name or f'Port {svc.port}'} exposed on {host.display_full}",
+            host=host.display_full,
             port=svc.port,
             service=svc.display_name,
             detail=svc.risk_reason or f"Port {svc.port}/{svc.protocol} is open.",

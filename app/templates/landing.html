@@ -78,6 +78,11 @@ main { flex:1; display:flex; flex-direction:column; align-items:center; justify-
 .unlocked-note { font-size:0.7rem; color:var(--grn); margin-top:0.3rem; }
 
 footer { border-top:1px solid var(--line); padding:1.25rem; text-align:center; font-size:0.66rem; color:#2a3949; letter-spacing:0.06em; }
+.wipe-zone { max-width:900px; margin:2.5rem auto 0; padding:1rem 1.25rem; text-align:center; border-top:1px dashed var(--line2); display:flex; flex-direction:column; align-items:center; gap:0.4rem; }
+.wipe-link { font-family:var(--mono); font-size:0.78rem; color:#ff6b6b; background:#1a0c10; border:1px solid #5a2230; border-radius:5px; padding:0.45rem 0.9rem; cursor:pointer; letter-spacing:0.04em; }
+.wipe-link:hover { color:#fff; background:linear-gradient(180deg,#c0392b,#8e2820); border-color:#ff4d4d; }
+.wipe-link:disabled { opacity:0.6; cursor:default; }
+.wipe-hint { font-size:0.62rem; color:var(--dim); max-width:520px; line-height:1.5; }
 footer a { color:var(--dim); text-decoration:none; }
 </style>
 </head>
@@ -135,10 +140,55 @@ footer a { color:var(--dim); text-decoration:none; }
     </div>
 
   </div>
+
+  <div class="wipe-zone">
+    <button class="wipe-link" id="wipeBtn" onclick="wipeApp()">⊘ Finish &amp; Wipe this machine</button>
+    <span class="wipe-hint">Saves any reports to the Desktop, then removes SounRunner and its setup files. Use before leaving a client site.</span>
+  </div>
+
 </main>
 
 <footer>
   SOUN AL HOSN CYBERSECURITY LLC · DUBAI, UAE · <a href="https://sounalhosn.ae">sounalhosn.ae</a> · AUTHORIZED USE ONLY
 </footer>
+
+<script>
+// Finish & Wipe from the landing page (no scan in flight) — exports the whole
+// reports dir, then removes the app + setup files and shuts down.
+function wipeApp() {
+  const ok = confirm(
+    "Finish & Wipe this machine\n\n" +
+    "This will:\n" +
+    "  • SAVE any reports to a folder on the Desktop\n" +
+    "  • DELETE SounRunner, its installers and setup files from this machine\n" +
+    "  • Shut down the app\n\n" +
+    "Continue?"
+  );
+  if (!ok) return;
+  const btn = document.getElementById('wipeBtn');
+  btn.disabled = true; btn.textContent = 'Saving & wiping…';
+  fetch('/wipe', { method: 'POST' })
+    .then(r => r.json().then(data => ({ ok: r.ok, data })))
+    .then(({ ok, data }) => {
+      if (!ok || !data.ok) {
+        btn.disabled = false; btn.textContent = '⊘ Finish & Wipe this machine';
+        alert('Wipe aborted — nothing was deleted.\n\n' + (data.message || 'Unknown error'));
+        return;
+      }
+      document.body.innerHTML =
+        '<div style="font-family:monospace;color:#cfe;background:#000e11;min-height:100vh;' +
+        'display:flex;align-items:center;justify-content:center;text-align:center;padding:2rem;">' +
+        '<div><h2 style="color:#2dd47f;">Done.</h2><p>' + (data.message || '') + '</p>' +
+        '<p style="color:#8aa;">You can close this window. SounRunner has been removed.</p></div></div>';
+    })
+    .catch(() => {
+      document.body.innerHTML =
+        '<div style="font-family:monospace;color:#cfe;background:#000e11;min-height:100vh;' +
+        'display:flex;align-items:center;justify-content:center;text-align:center;padding:2rem;">' +
+        '<div><h2 style="color:#2dd47f;">Done.</h2><p>Reports saved to the Desktop. SounRunner has been removed.</p>' +
+        '<p style="color:#8aa;">You can close this window.</p></div></div>';
+    });
+}
+</script>
 </body>
 </html>

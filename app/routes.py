@@ -276,6 +276,7 @@ def fix_list(job_id: str):
         return jsonify({"error": "not available"}), 404
     from app.modules.workspace import finding_key
     from app.modules.fixgen import generate_fix
+    from app.modules.fixrun import is_runnable, remote_available
     domain = job.get("domain", "")
     out = []
     for f in _job_findings(job):
@@ -289,8 +290,10 @@ def fix_list(job_id: str):
             "summary": fx.summary, "steps": fx.steps, "warnings": fx.warnings,
             "note": fx.note, "fix_script": fx.fix_script, "rollback_script": fx.rollback_script,
             "location": fx.location, "run_hint": fx.run_hint,
+            # execution metadata for the "Run the fix" UI
+            "runnable": is_runnable(fx),
         })
-    return jsonify({"fixes": out, "count": len(out)})
+    return jsonify({"fixes": out, "count": len(out), "remote": remote_available()})
 
 
 @bp.get("/fix/<job_id>/<kind>/<path:key>")
@@ -314,6 +317,44 @@ def fix_download(job_id: str, kind: str, key: str):
         mimetype="text/plain",
         headers={"Content-Disposition": f"attachment; filename={fname}"},
     )
+
+
+@bp.post("/fix/run/<job_id>/<path:key>")
+def fix_run(job_id: str, key: str):
+    """Execute a generated fix locally or on a remote host (Advanced only).
+
+    Body (JSON): {mode: "local"|"remote", target?, username?, password?, key_text?}
+    Credentials, when present, are used only to open the remote transport and are
+    NEVER written to disk or logged. We do not echo them back; fixrun also scrubs
+    them from any captured output as a backstop.
+    """
+    if not _advanced_unlocked():
+        return jsonify({"ok": False, "error": "locked"}), 403
+    job = _jobs.get(job_id)
+    if not job or job.get("mode") == "free":
+        return jsonify({"ok": False, "error": "not available"}), 404
+    fx = _find_fix(job, key)
+    if not fx:
+        return jsonify({"ok": False, "error": "No fix available for this finding."}), 404
+
+    data = request.get_json(silent=True) or {}
+    mode = (data.get("mode") or "").strip()
+    target = (data.get("target") or fx.host or "").strip()
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""        # not stripped — passwords may have edge whitespace
+    key_text = data.get("key_text") or ""
+
+    from app.modules.fixrun import run_fix
+    try:
+        result = run_fix(fx, mode=mode, target=target,
+                         username=username, password=password, key_text=key_text)
+    finally:
+        # Drop the credential references as soon as the call returns. (Python may
+        # keep them briefly until GC, but we never persist or log them anywhere.)
+        password = key_text = ""
+    # Attach the rollback download path so the operator can revert in one click.
+    result["rollback_url"] = f"/fix/{job_id}/rollback/{key}"
+    return jsonify(result)
 
 
 @bp.get("/api/subnets")
@@ -671,13 +712,18 @@ def job_status(job_id: str):
     })
 
 
+@bp.post("/wipe")
 @bp.post("/wipe/<job_id>")
-def wipe_app(job_id: str):
+def wipe_app(job_id: str = ""):
     """Private-tool self-destruct: save reports, delete the app, shut down.
 
     Exports all reports to a safe folder on the Desktop (verified), then
     schedules removal of the app (the frozen .exe, or the source tree) and shuts
     the server down. If the export fails, nothing is deleted.
+
+    job_id is accepted for symmetry with the progress/workspace pages but is not
+    used — the wipe always exports the whole reports dir, so it can also be fired
+    from the landing page (no job in flight) to clean a machine between visits.
     """
     global _wiping
     if _wiping:

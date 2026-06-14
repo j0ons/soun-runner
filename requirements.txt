@@ -19,3 +19,12 @@ weasyprint>=60.0
 # CVE lookup (NIST NVD), and SSL/TLS analysis all use the Python standard
 # library only (socket, ssl, subprocess, urllib) — no extra packages needed.
 # Nmap must be installed separately on the host (winget/brew install nmap).
+
+# Remote fix execution ("Run the fix") — OPTIONAL. Local fixes run with the
+# stdlib (PowerShell/bash subprocess); these are only needed to push a fix to a
+# REMOTE host. The app imports them lazily and degrades gracefully if absent
+# (the UI shows "remote execution unavailable — install paramiko / pywinrm").
+#   paramiko  -> SSH to Linux targets
+#   pywinrm   -> WinRM to Windows targets
+paramiko>=3.0.0
+pywinrm>=0.4.3

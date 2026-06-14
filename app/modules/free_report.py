@@ -53,6 +53,7 @@ class FreeHostRow:
     ports: str
     risk: str
     risk_label: str
+    hostname: str = ""
 
 
 @dataclass
@@ -123,7 +124,7 @@ def build_free_report(client_name: str, target: str, scan_result: ScanResult) ->
             risk=svc.risk,
             service=svc.name or f"Port {svc.port}",
             port=svc.port,
-            host=host.display_name,
+            host=host.display_full,
             note=svc.risk_reason or f"Port {svc.port}/{svc.protocol} is open and exposed.",
             fix=kb.get("fix", "Review whether this service must be exposed. Restrict it to specific trusted IPs with a firewall rule, or disable it if unused."),
             plain_what=kb.get("what", "A service on one of your devices is open to the network."),
@@ -136,6 +137,7 @@ def build_free_report(client_name: str, target: str, scan_result: ScanResult) ->
     for h in scan_result.hosts:
         rpt.host_rows.append(FreeHostRow(
             ip=h.ip,
+            hostname=(h.hostname if h.hostname and h.hostname != h.ip else ""),
             device_type=h.device_type,
             device_icon=h.device_icon,
             ports=", ".join(str(p) for p in h.open_ports[:14]),

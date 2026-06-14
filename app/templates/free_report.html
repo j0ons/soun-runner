@@ -60,6 +60,8 @@ td { padding:0.6rem 0.8rem; border-bottom:1px solid #0d1525; }
 tr:last-child td { border-bottom:none; }
 .td-ip { font-family:monospace; color:#94a3b8; }
 .td-ports { font-family:monospace; color:var(--muted); font-size:0.74rem; }
+.dev { display:flex; flex-direction:column; gap:0.1rem; }
+.dev-hostname { font-family:monospace; font-size:0.72rem; color:var(--cyan); }
 .dev { display:flex; align-items:center; gap:0.4rem; }
 
 .empty { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:1.5rem; text-align:center; color:var(--muted); font-size:0.875rem; }
@@ -92,6 +94,7 @@ tr:last-child td { border-bottom:none; }
   /* Several spots hard-code light theme colours (#94a3b8 / #f8fafc) that vanish
      on white — force the brand line, meta values and table cells to dark ink. */
   .brand-name, .meta-item span, .td-ip, .dev-name, .td-ports, td, th { color:#1e293b !important; }
+  .dev-hostname { color:#0369a1 !important; }
   .f-title { color:#0f172a !important; }   /* finding headline — was near-white #f1f5f9 */
   .td-ports { color:#475569 !important; }   /* port list stays secondary but legible */
   .cta a, .cta em, .cta strong { color:#0369a1 !important; }   /* "we fix it for you" must read */
@@ -167,7 +170,7 @@ tr:last-child td { border-bottom:none; }
         <tbody>
           {% for h in r.host_rows %}
           <tr>
-            <td><div class="dev"><span class="dev-name">{{ h.device_type }}</span></div></td>
+            <td><div class="dev"><span class="dev-name">{{ h.device_type }}</span>{% if h.hostname %}<span class="dev-hostname">{{ h.hostname }}</span>{% endif %}</div></td>
             <td class="td-ip">{{ h.ip }}</td>
             {% if is_eng %}
             <td class="td-ports">{{ h.ports or '—' }}</td>

@@ -98,6 +98,14 @@ class Host:
         return self.hostname if self.hostname and self.hostname != self.ip else self.ip
 
     @property
+    def display_full(self) -> str:
+        """`hostname (ip)` when a name resolved, else the bare IP — so a finding
+        can be tied to the physical box without cross-referencing the asset table."""
+        if self.hostname and self.hostname != self.ip:
+            return f"{self.hostname} ({self.ip})"
+        return self.ip
+
+    @property
     def highest_risk(self) -> str:
         if not self.services:
             return "info"
@@ -370,8 +378,16 @@ def _service_args(nmap: str, profile: str, xml_path: Path, targets: str) -> list
 
     -Pn skips re-discovery (we already confirmed these hosts are up), so
     ping-blocking hosts are still fully port-scanned instead of being dropped.
+
+    -R --system-dns forces reverse-DNS on every host using the OPERATING SYSTEM
+    resolver (not nmap's own). On a client LAN the OS resolver also answers from
+    the local DNS / hosts file / AD, so we recover human-readable hostnames
+    (e.g. "RECEPTION-PC") instead of bare IPs — which is what the operator needs
+    to know which box a finding belongs to. nbstat (NetBIOS) is added too so
+    Windows machines that don't have a PTR record still surface their name.
     """
-    base = [nmap, "-sV", "-Pn", "--open", "-v", "--stats-every", "3s", "-oX", str(xml_path)]
+    base = [nmap, "-sV", "-Pn", "--open", "-R", "--system-dns",
+            "--script", "nbstat", "-v", "--stats-every", "3s", "-oX", str(xml_path)]
     if profile == "quick":
         ports = ["--top-ports", "100", "-T4"]
     elif profile == "thorough":
@@ -481,6 +497,15 @@ def run_scan_streaming(
 
     raw_xml = svc_xml.read_text(encoding="utf-8", errors="replace") if svc_xml.exists() else ""
     hosts = _parse_xml(raw_xml) if raw_xml else []
+
+    # Emit the resolved IP→hostname map so the operator can tell which physical
+    # box each finding belongs to. The XML hostname (PTR/NetBIOS) is authoritative,
+    # so we print it here rather than scraping nmap's stdout.
+    if hosts:
+        emit("[scan] Identified hosts:")
+        for h in hosts:
+            label = f"{h.ip}" + (f"  ({h.hostname})" if h.hostname else "  (no name resolved)")
+            emit(f"[scan]   • {label}")
 
     # Flag the gateway host
     if gateway:

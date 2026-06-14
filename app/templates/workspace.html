@@ -21,6 +21,9 @@ body { font-family:var(--sans); background:var(--bg); color:var(--txt); min-heig
 .bar .right { margin-left:auto; display:flex; gap:0.75rem; align-items:center; }
 .bar a { color:var(--dim); text-decoration:none; font-size:0.8rem; }
 .bar a:hover { color:var(--txt); }
+.wipe-link { font-family:inherit; font-size:0.8rem; color:#ff6b6b; background:#1a0c10; border:1px solid #5a2230; border-radius:4px; padding:0.25rem 0.6rem; cursor:pointer; }
+.wipe-link:hover { color:#fff; background:linear-gradient(180deg,#c0392b,#8e2820); border-color:#ff4d4d; }
+.wipe-link:disabled { opacity:0.6; cursor:default; }
 
 .layout { display:grid; grid-template-columns:280px 1fr 320px; height:calc(100vh - 50px); }
 /* Narrow window (e.g. AnyDesk / split-screen): keep the triage column with the
@@ -115,6 +118,25 @@ body { font-family:var(--sans); background:var(--bg); color:var(--txt); min-heig
 .fix-actions { display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:0.9rem; }
 .fix-dl { padding:0.5rem 0.9rem; border-radius:5px; font-family:var(--mono); font-size:0.72rem; font-weight:700; cursor:pointer; text-decoration:none; border:1px solid #14b566; background:linear-gradient(180deg,#0e9e57,#0a7a43); color:#021109; }
 .fix-dl.rb { background:#1a0c10; border-color:#5a2230; color:#ff8a8a; }
+/* Run-the-fix panel */
+.run-panel { margin-top:1rem; border:1px solid var(--line2); border-radius:7px; background:#070d15; padding:0.9rem 1rem; }
+.run-hd { font-size:0.78rem; font-weight:700; color:#5ee08f; letter-spacing:0.04em; margin-bottom:0.6rem; }
+.run-modes { display:flex; flex-direction:column; gap:0.35rem; font-size:0.78rem; color:var(--txt); margin-bottom:0.6rem; }
+.run-modes label { display:flex; align-items:center; gap:0.45rem; cursor:pointer; }
+.run-creds { border-top:1px dashed var(--line2); padding-top:0.7rem; margin-bottom:0.7rem; }
+.cred-row { display:flex; align-items:flex-start; gap:0.6rem; margin-bottom:0.45rem; }
+.cred-row label { width:78px; flex-shrink:0; font-size:0.72rem; color:var(--dim); padding-top:0.4rem; text-transform:uppercase; letter-spacing:0.05em; }
+.cred-row input, .cred-row textarea { flex:1; background:#03060a; border:1px solid var(--line2); border-radius:4px; color:var(--txt); font-family:var(--mono); font-size:0.78rem; padding:0.4rem 0.55rem; }
+.cred-row textarea { resize:vertical; }
+.cred-note { font-size:0.66rem; color:var(--dim); font-style:italic; }
+.run-go-row { display:flex; align-items:center; gap:0.8rem; }
+.run-btn { font-family:var(--mono); font-size:0.76rem; font-weight:700; letter-spacing:0.04em; cursor:pointer; padding:0.5rem 1rem; border-radius:5px; border:1px solid #14b566; background:linear-gradient(180deg,#0e9e57,#0a7a43); color:#021109; }
+.run-btn:disabled { opacity:0.6; cursor:default; }
+.run-status { font-size:0.74rem; }
+.run-status.busy { color:var(--amber); }
+.run-status.ok { color:#5ee08f; }
+.run-status.err { color:#ff6b6b; }
+.run-out { margin-top:0.7rem; background:#03060a; border:1px solid var(--line2); border-radius:5px; padding:0.7rem 0.85rem; font-family:var(--mono); font-size:0.72rem; color:#9fb3c4; white-space:pre-wrap; word-break:break-word; max-height:300px; overflow-y:auto; }
 .fix-note { font-size:0.7rem; color:var(--dim); margin-top:0.8rem; font-style:italic; }
 
 .manual-form { padding:0.85rem 1rem; border-top:1px solid var(--line); }
@@ -132,6 +154,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--txt); min-heig
     <a href="/report/{{ job_id }}" target="_blank">view report</a>
     <a href="/checklist/{{ job_id }}">field checklist</a>
     <a href="/advanced">console</a>
+    <button class="wipe-link" id="wipeBtn" onclick="wipeApp()">Finish &amp; Wipe</button>
   </div>
 </div>
 
@@ -316,6 +339,7 @@ function addManual() {
 
 // ── Deploy a Fix ───────────────────────────────────────────────────────────
 let fixCache = null;
+let fixRemote = {};   // {ssh:bool, winrm:bool} — which remote transports are installed
 
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
@@ -361,19 +385,155 @@ function openFix(key) {
          +  '<a class="fix-dl" href="/fix/' + jobId + '/fix/' + ek + '">⬇ Download Fix Script</a>'
          +  '<a class="fix-dl rb" href="/fix/' + jobId + '/rollback/' + ek + '">⬇ Download Rollback</a>'
          +  '</div>';
+
+    // ── Run the fix ──────────────────────────────────────────────────────
+    // Only windows/linux fixes are auto-runnable; DNS/manual are applied by hand.
+    if (fx.runnable) {
+      const isWin = fx.platform === 'windows';
+      const remoteTransport = isWin ? 'winrm' : 'ssh';
+      const remoteOk = fixRemote && fixRemote[remoteTransport];
+      html += '<div class="run-panel">';
+      html += '  <div class="run-hd">▶ Run this fix</div>';
+      html += '  <div class="run-modes">'
+            + '    <label><input type="radio" name="runmode" value="local" checked onchange="runModeChanged(\'' + ek + '\')"> On THIS machine</label>'
+            + '    <label><input type="radio" name="runmode" value="remote" onchange="runModeChanged(\'' + ek + '\')"> On the target host (' + esc(fx.host || '') + ')</label>'
+            + '  </div>';
+      // Credential form — shown only when "remote" is picked.
+      html += '  <div class="run-creds" id="runCreds" style="display:none;">';
+      if (!remoteOk) {
+        html += '    <div class="fix-warn">Remote ' + remoteTransport.toUpperCase()
+              + ' is not installed on this machine. Run: pip install '
+              + (isWin ? 'pywinrm' : 'paramiko') + '  (or run the fix locally / on the host).</div>';
+      }
+      html += '    <div class="cred-row"><label>Host</label><input id="cTarget" type="text" value="' + esc(fx.host || '') + '" placeholder="host or IP"></div>';
+      html += '    <div class="cred-row"><label>Username</label><input id="cUser" type="text" autocomplete="off" placeholder="' + (isWin ? 'Administrator' : 'root') + '"></div>';
+      html += '    <div class="cred-row"><label>Password</label><input id="cPass" type="password" autocomplete="new-password" placeholder="password"></div>';
+      if (!isWin) {
+        html += '    <div class="cred-row"><label>SSH key</label><textarea id="cKey" rows="3" placeholder="(optional) paste private key — leave blank to use the password"></textarea></div>';
+      }
+      html += '    <div class="cred-note">Credentials are used once to connect, never saved to disk or logs.</div>';
+      html += '  </div>';
+      html += '  <div class="run-go-row">';
+      html += '    <button class="run-btn" id="runBtn" onclick="runFix(\'' + ek + '\', ' + (isWin ? 'true' : 'false') + ')">Run fix</button>';
+      html += '    <span class="run-status" id="runStatus"></span>';
+      html += '  </div>';
+      html += '  <div class="run-out" id="runOut" style="display:none;"></div>';
+      html += '</div>';
+    }
+
     if (fx.note) html += '<div class="fix-note">' + esc(fx.note) + '</div>';
-    html += '<div class="fix-note">Soun Runner does not run anything on the target. Review every command, then run it yourself on the host.</div>';
+    if (!fx.runnable) html += '<div class="fix-note">This change is applied at the DNS/web/device system — review the steps and apply it there.</div>';
     body.innerHTML = html;
   };
 
   if (fixCache) { render(fixCache); return; }
   fetch('/fix/' + jobId)
     .then(r => r.json())
-    .then(d => { fixCache = d.fixes || []; render(fixCache); })
+    .then(d => { fixCache = d.fixes || []; fixRemote = d.remote || {}; render(fixCache); })
     .catch(() => { body.innerHTML = '<div class="fix-warn">Could not load fixes.</div>'; });
 }
 
+// Toggle the credential form when switching between local and remote run.
+function runModeChanged(ek) {
+  const mode = (document.querySelector('input[name="runmode"]:checked') || {}).value;
+  const creds = document.getElementById('runCreds');
+  if (creds) creds.style.display = (mode === 'remote') ? 'block' : 'none';
+}
+
+// Execute the fix. Credentials are read from the form, sent once, and never
+// retained client-side beyond this request.
+function runFix(ek, isWin) {
+  const mode = (document.querySelector('input[name="runmode"]:checked') || {}).value || 'local';
+  const btn = document.getElementById('runBtn');
+  const statusEl = document.getElementById('runStatus');
+  const outEl = document.getElementById('runOut');
+  const body = { mode: mode };
+  if (mode === 'remote') {
+    body.target = (document.getElementById('cTarget') || {}).value || '';
+    body.username = (document.getElementById('cUser') || {}).value || '';
+    body.password = (document.getElementById('cPass') || {}).value || '';
+    const keyEl = document.getElementById('cKey');
+    if (keyEl) body.key_text = keyEl.value || '';
+    if (!body.username) { alert('Enter a username for the remote host.'); return; }
+  } else {
+    if (!confirm('Run this fix on THIS machine now? It changes the local system (a rollback script is available).')) return;
+  }
+  btn.disabled = true;
+  statusEl.textContent = (mode === 'remote' ? 'Connecting & running…' : 'Running locally…');
+  statusEl.className = 'run-status busy';
+  fetch('/fix/run/' + jobId + '/' + ek, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  })
+    .then(r => r.json())
+    .then(d => {
+      btn.disabled = false;
+      // Wipe the password field from the DOM the moment the request returns.
+      const pw = document.getElementById('cPass'); if (pw) pw.value = '';
+      const kt = document.getElementById('cKey'); if (kt) kt.value = '';
+      outEl.style.display = 'block';
+      if (d.ok) {
+        statusEl.textContent = '✓ Applied' + (d.transport && d.transport !== 'local' ? ' via ' + d.transport.toUpperCase() : '') + (d.exit_code != null ? ' (exit ' + d.exit_code + ')' : '');
+        statusEl.className = 'run-status ok';
+      } else {
+        statusEl.textContent = '✗ ' + (d.error || ('Failed' + (d.exit_code != null ? ' (exit ' + d.exit_code + ')' : '')));
+        statusEl.className = 'run-status err';
+      }
+      let o = '';
+      if (d.stdout) o += '── output ──\n' + d.stdout + '\n';
+      if (d.stderr) o += '── errors ──\n' + d.stderr + '\n';
+      if (!o && d.error) o = d.error;
+      outEl.textContent = o || '(no output)';
+      if (d.rollback_url) {
+        const rb = document.createElement('a');
+        rb.className = 'fix-dl rb'; rb.href = d.rollback_url; rb.textContent = '⬇ Download Rollback (revert this)';
+        rb.style.marginTop = '0.6rem'; rb.style.display = 'inline-block';
+        outEl.appendChild(document.createElement('br')); outEl.appendChild(rb);
+      }
+    })
+    .catch(() => {
+      btn.disabled = false;
+      statusEl.textContent = '✗ Request failed'; statusEl.className = 'run-status err';
+    });
+}
+
 function closeFix() { document.getElementById('fixModal').classList.remove('open'); }
+
+// Finish & Wipe — save reports to the Desktop, remove SounRunner + setup files,
+// shut down. Same flow as the progress page; the route ignores the job id.
+function wipeApp() {
+  const ok = confirm(
+    "Finish & Wipe\n\n" +
+    "This will:\n" +
+    "  • SAVE your reports to a folder on the Desktop\n" +
+    "  • DELETE SounRunner, its installers and setup files from this machine\n" +
+    "  • Shut down the app\n\n" +
+    "Make sure your work is finished. Continue?"
+  );
+  if (!ok) return;
+  const btn = document.getElementById('wipeBtn');
+  btn.disabled = true; btn.textContent = 'Saving & wiping…';
+  fetch('/wipe/' + jobId, { method: 'POST' })
+    .then(r => r.json().then(data => ({ ok: r.ok, data })))
+    .then(({ ok, data }) => {
+      if (!ok || !data.ok) {
+        btn.disabled = false; btn.textContent = 'Finish & Wipe';
+        alert('Wipe aborted — nothing was deleted.\n\n' + (data.message || 'Unknown error'));
+        return;
+      }
+      document.body.innerHTML =
+        '<div style="font-family:monospace;color:#cfe;background:#000e11;min-height:100vh;' +
+        'display:flex;align-items:center;justify-content:center;text-align:center;padding:2rem;">' +
+        '<div><h2 style="color:#2dd47f;">Done.</h2><p>' + (data.message || '') + '</p>' +
+        '<p style="color:#8aa;">You can close this window. SounRunner has been removed.</p></div></div>';
+    })
+    .catch(() => {
+      document.body.innerHTML =
+        '<div style="font-family:monospace;color:#cfe;background:#000e11;min-height:100vh;' +
+        'display:flex;align-items:center;justify-content:center;text-align:center;padding:2rem;">' +
+        '<div><h2 style="color:#2dd47f;">Done.</h2><p>Reports saved to the Desktop. SounRunner has been removed.</p>' +
+        '<p style="color:#8aa;">You can close this window.</p></div></div>';
+    });
+}
 </script>
 
 <div class="fix-modal" id="fixModal" onclick="if(event.target===this)closeFix()">
