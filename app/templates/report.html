@@ -728,15 +728,77 @@ table.data-table tbody tr:hover td { background: rgba(14,165,233,0.03); }
 
 /* ── Print ──────────────────────────────────────────────────────────────── */
 @media print {
-  body { background: #fff; color: #000; font-size: 11px; }
+  /* Re-point the whole colour system to print-safe (dark-on-light) values.
+     The on-screen report is a dark theme; every element draws its colour from
+     these custom properties, so overriding the vars here recolours the entire
+     PDF in one place — body text, secondary/"muted" text, accents and table
+     cells all become legible on the white print background. All print colours
+     meet WCAG AA (>=4.5:1) on white. */
+  :root {
+    --bg:      #ffffff;
+    --surface: #ffffff;
+    --card:    #ffffff;
+    --border:  #cbd5e1;
+    --border2: #94a3b8;
+    --text:    #0f172a;   /* near-black body text */
+    --muted:   #475569;   /* AA-legible secondary text (was #64748b, ~3.6:1) */
+    --accent:  #0369a1;   /* darker sky for contrast on white (was #0ea5e9) */
+    --green:   #047857;   /* darker green for contrast on white */
+    --c-crit:  #dc2626;
+    --c-high:  #c2410c;
+    --c-med:   #a16207;   /* amber is unreadable on white at #eab308 */
+    --c-low:   #2563eb;
+    --c-info:  #475569;
+    --c-pass:  #047857;
+  }
+  body { background: #fff; color: var(--text); font-size: 11px; }
   .cover { background: #f1f5f9; border-bottom: 2px solid #cbd5e1; }
   .cover h1, .cover-eyebrow { color: #0f172a !important; }
+  /* Inline severity colours echoed via var() (counts on the cover, etc.) ride
+     the overrides above; any element still on the light --text token now reads
+     dark, so nothing is left as light-grey-on-white. */
   /* Stack the cover vertically in print so the risk box can't overlap the brand line */
   .cover-inner { flex-direction: column; }
   .risk-block { background: #f8fafc; border-color: #e2e8f0; min-width: 0; width: 100%; margin-top: 1.5rem; }
   .content { padding: 1.5rem 2rem; }
   .finding, .stat-card, .data-table-wrap, .cta-box, .exec-card { border-color: #e2e8f0 !important; background: #fff !important; }
   .disclaimer { background: #f8fafc; }
+  /* Structural panels carry hard-coded near-black backgrounds (not via var) for
+     the on-screen dark theme. In print, recolour them to light tints with dark
+     ink so nothing renders dark-on-dark. The recommendation/code boxes are the
+     priority: they hold the copy-paste fix commands the client must be able to read. */
+  .rec-box, .field-notes, .panel-body, .panel-card,
+  .reach-table th, .data-table th, .cve-list-hdr,
+  [class*="section-hdr-icon"] {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+  }
+  .rec-box, .field-notes { border-color: #cbd5e1 !important; }
+  .rec-box .rec-label { color: #0369a1 !important; }
+  .rec-box, .rec-box * , pre, code, .mono { color: #0f172a !important; }
+  pre, code, .mono { background: #f1f5f9 !important; }
+  /* Risk/role pills & hop nodes: light chip + dark, severity-tinted text */
+  .risk-pill, .hop-node, .hop-role, .dev-gw-tag, .panel-type-chip {
+    background: #f1f5f9 !important; border-color: #cbd5e1 !important;
+  }
+  .risk-pill.low, .hop-node.internal, .hop-role.internal { color: #2563eb !important; }
+  .risk-pill.info, .hop-node.timeout, .hop-role.timeout { color: #475569 !important; }
+  .hop-node.gateway, .hop-role.gateway, .dev-gw-tag { color: #047857 !important; }
+  /* Any inline severity colour token resolves through the print var overrides;
+     force the generic light body token dark so it can't stay grey-on-white. */
+  .finding-meta, .td-os, .td-ports, .td-vendor, .hop-meta, .cve-desc,
+  .panel-title-txt, .agent-stat-lbl, .stat-lbl { color: #475569 !important; }
+  /* Headlines & key values are hard-coded near-white (#f1f5f9/#f8fafc/#e2e8f0)
+     for the dark theme — force them dark so they don't disappear on white. */
+  .finding-title, .ssl-finding-name, .rb-title, .field-module-hdr,
+  .peri-item .v, .hop-ip, .dev-type, .reach-dst, .ctrl-name,
+  .exec-card-title, .section-title { color: #0f172a !important; }
+  /* Severity pills: light tint + dark severity-tinted text (were dark boxes) */
+  .risk-pill.critical { background:#fef2f2 !important; color:#b91c1c !important; border-color:#fca5a5 !important; }
+  .risk-pill.high     { background:#fff7ed !important; color:#c2410c !important; border-color:#fdba74 !important; }
+  .risk-pill.medium   { background:#fefce8 !important; color:#a16207 !important; border-color:#fde047 !important; }
+  .risk-pill.low      { background:#eff6ff !important; color:#1d4ed8 !important; border-color:#bfdbfe !important; }
+  .risk-pill.info     { background:#f1f5f9 !important; color:#475569 !important; border-color:#cbd5e1 !important; }
   /* Arabic executive summary gets its own page for the decision-maker */
   .arabic-summary { page-break-before: always; }
   .finding-body { display: block !important; }

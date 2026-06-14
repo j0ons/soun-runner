@@ -99,12 +99,53 @@ body::after { content:''; position:fixed; inset:0; pointer-events:none;
 .btn-danger { border-color: #5a2230; color: #ff6b6b; background: #1a0c10; }
 .btn-danger:hover { color: #fff; background: linear-gradient(180deg,#c0392b,#8e2820); border-color: #ff4d4d; box-shadow: 0 0 18px rgba(255,77,77,0.35); }
 .wipe-note { font-family: var(--mono); font-size: 0.66rem; color: var(--dim); margin-top: 0.5rem; width:100%; }
+
+/* ── Falcon fly-around on scan completion ──────────────────────────────────
+   On "ASSESSMENT COMPLETE" the Soun Al Hosn falcon launches from the bottom-
+   left corner, sweeps a banking loop around the page, then settles onto the
+   topbar brand mark (its home). Pure CSS motion path; JS only toggles it on. */
+.falcon {
+  position: fixed; left: 0; top: 0; width: 72px; height: 72px;
+  object-fit: contain; z-index: 10000; pointer-events: none;
+  opacity: 0; will-change: transform, opacity;
+  /* soft glow so it reads against the dark grid while in flight */
+  filter: drop-shadow(0 0 14px rgba(45,212,127,0.55)) drop-shadow(0 0 4px rgba(43,184,232,0.5));
+}
+.falcon.fly {
+  /* flight (2.6s) then a settle tween handled by the .land class below */
+  animation: falcon-flight 2.6s cubic-bezier(0.45,0.05,0.35,1) forwards;
+}
+/* Waypoints are viewport-relative so the path scales to any window size.
+   rotate() banks the falcon into each turn; scale() gives a little depth. */
+@keyframes falcon-flight {
+  0%   { opacity: 0; transform: translate(2vw, 88vh) rotate(-18deg) scale(0.5); }
+  8%   { opacity: 1; }
+  22%  { transform: translate(20vw, 24vh) rotate(14deg)  scale(1.15); }
+  42%  { transform: translate(74vw, 14vh) rotate(26deg)  scale(1.0); }
+  60%  { transform: translate(82vw, 60vh) rotate(-8deg)  scale(1.1); }
+  78%  { transform: translate(40vw, 70vh) rotate(-22deg) scale(0.95); }
+  92%  { transform: translate(8vw, 18vh)  rotate(6deg)   scale(0.8); }
+  100% { opacity: 1; transform: translate(var(--home-x,18px), var(--home-y,11px)) rotate(0deg) scale(0.36); }
+}
+/* The brand mark stays hidden while the falcon is mid-flight, then fades back
+   in underneath the landing falcon so the handoff looks like one bird. */
+.brand-glyph.landing img { opacity: 0; }
+.brand-glyph.landing { box-shadow: 0 0 18px rgba(45,212,127,0.5); transition: box-shadow 0.4s; }
+.falcon.perched { animation: falcon-perch-fade 0.5s ease forwards; }
+@keyframes falcon-perch-fade { to { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .falcon.fly { animation: none; opacity: 0; }  /* no motion — brand mark stays put */
+}
 </style>
 </head>
 <body>
 
+<!-- Falcon that flies around the page when the assessment completes, then perches on the brand mark -->
+<img class="falcon" id="falcon" src="{{ logo_uri }}" alt="" aria-hidden="true">
+
 <div class="topbar">
-  <div class="brand-glyph"><img src="{{ logo_uri }}" alt="Soun" style="width:26px;height:26px;object-fit:contain;"></div>
+  <div class="brand-glyph" id="brandGlyph"><img src="{{ logo_uri }}" alt="Soun" style="width:26px;height:26px;object-fit:contain;"></div>
   <div>
     <div class="brand-txt">SOUN<span class="accent">RUNNER</span></div>
     <span class="brand-sub">LIVE ASSESSMENT · {{ job.client_name }}</span>
@@ -253,6 +294,38 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) refr
 window.addEventListener('focus', refreshStats);
 window.addEventListener('pageshow', refreshStats);
 
+// Falcon fly-around: launch on completion, land centred on the brand mark.
+let falconLaunched = false;
+function launchFalcon() {
+  if (falconLaunched) return;            // once per scan
+  falconLaunched = true;
+  const falcon = document.getElementById('falcon');
+  const glyph  = document.getElementById('brandGlyph');
+  if (!falcon || !glyph) return;
+
+  // Respect reduced-motion: skip the flight entirely, leave the brand mark as-is.
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  // Compute the landing point so the 72px falcon ends centred over the brand glyph.
+  const r = glyph.getBoundingClientRect();
+  const fW = 72, fH = 72;
+  const homeX = r.left + r.width / 2 - fW / 2;
+  const homeY = r.top + r.height / 2 - fH / 2;
+  falcon.style.setProperty('--home-x', homeX + 'px');
+  falcon.style.setProperty('--home-y', homeY + 'px');
+
+  glyph.classList.add('landing');        // hide the static mark during the flight
+  falcon.classList.add('fly');
+
+  // When the flight finishes, hand off: brand mark fades back, flying copy fades out.
+  falcon.addEventListener('animationend', function onFlight(e) {
+    if (e.animationName !== 'falcon-flight') return;
+    falcon.removeEventListener('animationend', onFlight);
+    glyph.classList.remove('landing');   // brand mark reappears under the falcon
+    falcon.classList.add('perched');     // flying copy fades, leaving the perched mark
+  });
+}
+
 function doPoll() {
   fetch('/status/' + jobId).then(r => r.json()).then(data => {
     const nl = data.log.slice(lastLen);
@@ -266,6 +339,7 @@ function doPoll() {
       document.getElementById('statTitle').textContent = 'ASSESSMENT COMPLETE';
       document.querySelectorAll('.ph').forEach(p => { p.classList.remove('active'); p.classList.add('done'); });
       document.getElementById('actions').style.display = 'flex';
+      launchFalcon();   // the falcon sweeps the page and perches on the brand mark
     } else if (data.status === 'error') {
       clearInterval(poll);
       document.getElementById('statIcon').outerHTML = '<div class="err-i">✕</div>';

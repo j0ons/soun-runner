@@ -73,12 +73,43 @@ tr:last-child td { border-bottom:none; }
 .disclaimer { background:#0b1220; border-top:1px solid var(--border); padding:1.25rem 2.5rem; font-size:0.72rem; color:#374151; line-height:1.7; }
 
 @media print {
-  body { background:#fff; color:#000; font-size:11px; }
+  /* Re-point the colour system to print-safe (dark-on-light) values so the
+     whole PDF stays legible on white — body text, "muted" secondary text and
+     accents all draw from these tokens. Print colours meet WCAG AA on white. */
+  :root {
+    --bg:#ffffff; --card:#ffffff; --border:#cbd5e1;
+    --txt:#0f172a; --muted:#475569;          /* was #64748b, ~3.6:1 — too light */
+    --cyan:#0369a1; --green:#047857;
+    --c-crit:#dc2626; --c-high:#c2410c; --c-med:#a16207; --c-low:#2563eb; --c-info:#475569;
+  }
+  body { background:#fff; color:var(--txt); font-size:11px; }
   .cover { background:#f1f5f9; border-bottom:2px solid #cbd5e1; flex-direction:column; }
   .cover h1, .eyebrow { color:#0f172a !important; }
+  .cover h1 { color:#0f172a !important; }
   .risk-block { background:#f8fafc; border-color:#e2e8f0; width:100%; margin-top:1.25rem; }
   .finding, .stat-card, .data-wrap, .cta, .exec { border-color:#e2e8f0 !important; background:#fff !important; }
   .finding { break-inside:avoid; }
+  /* Several spots hard-code light theme colours (#94a3b8 / #f8fafc) that vanish
+     on white — force the brand line, meta values and table cells to dark ink. */
+  .brand-name, .meta-item span, .td-ip, .dev-name, .td-ports, td, th { color:#1e293b !important; }
+  .f-title { color:#0f172a !important; }   /* finding headline — was near-white #f1f5f9 */
+  .td-ports { color:#475569 !important; }   /* port list stays secondary but legible */
+  .cta a, .cta em, .cta strong { color:#0369a1 !important; }   /* "we fix it for you" must read */
+  /* Elements with hard-coded dark backgrounds / light text don't follow the
+     var overrides — recolour them to light panels with dark ink for print. */
+  .exec { background:#f8fafc !important; color:#0f172a !important; }
+  .exec, .exec * { color:#0f172a !important; }
+  th { background:#e2e8f0 !important; color:#1e293b !important; }
+  .fix-box { background:#f1f5f9 !important; color:#0f172a !important; border-color:#cbd5e1 !important; }
+  .f-host, .f-note { color:#475569 !important; background:#f1f5f9 !important; }
+  .stat-num.neutral { color:#475569 !important; }
+  .cta { background:#f8fafc !important; }
+  .cta, .cta p, .cta-list span, .cta-contacts span { color:#1e293b !important; }
+  .disclaimer { background:#f8fafc !important; color:#475569 !important; }
+  /* Severity pills: light tint background + dark severity-tinted text */
+  .risk-pill.critical { background:#fef2f2 !important; color:#b91c1c !important; border-color:#fca5a5 !important; }
+  .risk-pill.high     { background:#fff7ed !important; color:#c2410c !important; border-color:#fdba74 !important; }
+  .risk-pill.medium   { background:#fefce8 !important; color:#a16207 !important; border-color:#fde047 !important; }
 }
 </style>
 </head>
