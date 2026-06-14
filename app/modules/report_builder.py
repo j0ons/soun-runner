@@ -42,6 +42,7 @@ class Finding:
     service: str = ""
     cves: list = field(default_factory=list)
     category: str = "network"   # network | email | ssl | vuln
+    device_type: str = ""       # classified device of the host (Router/ESXi/NAS/…)
 
     @property
     def risk_label(self) -> str:
@@ -285,6 +286,7 @@ def build_report(
             recommendation=_port_recommendation(svc.port),
             cves=svc.cves if hasattr(svc, "cves") else [],
             category="network",
+            device_type=getattr(host, "device_type", ""),
         ))
 
     # ── DNS / Email findings ─────────────────────────────────────────────────────

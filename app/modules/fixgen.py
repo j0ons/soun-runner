@@ -524,6 +524,91 @@ def _classify_location(fx: "FixScript", finding, local_ips: set | None) -> None:
             )
 
 
+# Device types that are NOT general-purpose Windows/Linux hosts. A PowerShell or
+# bash fix can't run on these — they're configured through their own admin UI /
+# console — so for these we emit manual, device-specific guidance instead.
+_APPLIANCE_TYPES = {
+    "Router / Gateway", "Firewall", "Network Device", "Hypervisor / ESXi",
+    "NAS / Storage", "IP Camera / CCTV", "Printer", "VoIP / Phone",
+    "IoT / Embedded", "Unknown Device",
+}
+
+# Per-device-type "how to remediate this on the appliance" guidance.
+_APPLIANCE_GUIDE = {
+    "Router / Gateway": [
+        "Log into the router/gateway admin page (usually http://<this-ip> or the vendor app).",
+        "Find Firewall / Port Forwarding / Remote Management and REMOVE any rule that exposes this port to the WAN/internet.",
+        "Disable 'Remote Management' / 'Remote Admin' unless you truly need it; if you do, restrict it to specific source IPs and use HTTPS.",
+        "Change the default admin password and update the firmware.",
+    ],
+    "Firewall": [
+        "Log into the firewall management console (FortiGate/Palo Alto/etc.).",
+        "Locate the policy/VIP that publishes this service and restrict or remove it; expose only what the business needs.",
+        "Limit management access to a trusted management subnet; enforce MFA on admin logins.",
+        "Confirm firmware is current and default credentials are changed.",
+    ],
+    "Hypervisor / ESXi": [
+        "This is a hypervisor (ESXi/vSphere) — do NOT run Windows/Linux host scripts against it.",
+        "In the ESXi host / vCenter UI: enable the ESXi firewall and restrict management (443/902/22) to your management network only.",
+        "Disable SSH and the ESXi Shell unless actively needed; enable Lockdown Mode.",
+        "Apply the latest ESXi patches and rotate the root password.",
+    ],
+    "NAS / Storage": [
+        "Log into the NAS admin UI (Synology DSM / QNAP QTS / etc.).",
+        "Disable the exposed service if unused, or restrict it to the LAN; never expose SMB/management to the internet.",
+        "Enable the NAS firewall + auto-block, enforce HTTPS, and turn on 2-factor for admin.",
+        "Update firmware/DSM and change default accounts.",
+    ],
+    "IP Camera / CCTV": [
+        "This is a camera/NVR — configure it from its own web UI or the vendor app, not via host scripts.",
+        "Remove any internet/WAN exposure (port-forward or UPnP) for this device; keep cameras on an isolated VLAN.",
+        "Change the default password, disable unused services (Telnet/ONVIF if not needed), and update firmware.",
+        "If remote viewing is required, use the vendor's secure relay or a VPN — not a direct port forward.",
+    ],
+    "Printer": [
+        "Configure the printer from its embedded web page (EWS).",
+        "Disable unused/legacy protocols (raw 9100, Telnet, FTP) and require HTTPS for admin.",
+        "Set an admin password and keep the printer off the internet; restrict to the office LAN.",
+        "Update the printer firmware.",
+    ],
+    "VoIP / Phone": [
+        "Configure on the PBX/phone admin console.",
+        "Restrict SIP/management to trusted networks; never expose SIP directly to the internet without a SBC.",
+        "Change default credentials and enable transport security (TLS/SRTP) where supported.",
+    ],
+}
+_APPLIANCE_GUIDE_DEFAULT = [
+    "This device is an appliance/embedded system — it is configured from its own admin interface, not via Windows/Linux scripts.",
+    "Open its web admin UI (http(s)://<this-ip>) or vendor app.",
+    "Disable or firewall-off the exposed service; remove any internet exposure for it.",
+    "Change default credentials and update its firmware.",
+]
+
+
+def _appliance_guidance(finding, device_type: str, svc: str, port: int) -> FixScript:
+    """Manual, device-specific remediation for an appliance the operator can't
+    run a host script on (router, ESXi, NAS, camera, printer, …)."""
+    steps = _APPLIANCE_GUIDE.get(device_type, _APPLIANCE_GUIDE_DEFAULT)
+    body = (
+        f"# {device_type} — {svc} (port {port}) on {finding.host}\n"
+        f"# This device is configured from its OWN admin interface — not via a\n"
+        f"# Windows/Linux script. Apply these steps on the device itself:\n\n"
+        + "\n".join(f"  {i+1}. {s}" for i, s in enumerate(steps))
+        + "\n"
+    )
+    return FixScript(
+        title=f"Secure {svc} on {device_type}",
+        finding_title=finding.title, host=finding.host, port=port,
+        platform="manual", language="text",
+        summary=f"{device_type}: apply this on the device's own admin interface — not auto-runnable.",
+        fix_script=body, rollback_script="", steps=list(steps),
+        warnings=[f"{device_type} detected — a host fix script would not run here; "
+                  f"follow the device steps instead."],
+        note="SounRunner does not log into appliances. Apply these on the device itself.",
+        location="n/a",
+    )
+
+
 def generate_fix(finding, domain: str = "", local_ips: set | None = None) -> "FixScript | None":
     """Map a single finding to a FixScript, or None if we have no recipe for it.
 
@@ -549,7 +634,13 @@ def generate_fix(finding, domain: str = "", local_ips: set | None = None) -> "Fi
     # SNMP
     elif port == 161 or "snmp" in title:
         fx = _snmp_fix(finding)
-    # Service/port-based fixes
+    # Service/port-based fixes.
+    # GUARD: if the host is an appliance (router, ESXi, NAS, camera, printer,
+    # IoT…) a Windows/Linux host script can't run on it — emit device-specific
+    # manual guidance instead of a PowerShell fix that would never apply.
+    elif (getattr(finding, "device_type", "") in _APPLIANCE_TYPES
+          and port and cat in ("network", "config", "web", "validation")):
+        fx = _appliance_guidance(finding, getattr(finding, "device_type", ""), svc, port)
     elif port == 3389:
         fx = _rdp_harden_windows(finding)
     elif port in (139, 445):
