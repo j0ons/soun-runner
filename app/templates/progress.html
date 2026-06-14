@@ -227,7 +227,7 @@ body::after { content:''; position:fixed; inset:0; pointer-events:none;
       <button class="btn btn-danger" id="wipeBtn" onclick="wipeApp()">Finish &amp; Wipe</button>
     </div>
     <div class="wipe-note">
-      Private tool — "Finish &amp; Wipe" saves your reports to the Desktop, then removes SounRunner from this machine.
+      Private tool — "Finish &amp; Wipe" saves your reports to the Desktop, then removes SounRunner and its setup files from this machine.
     </div>
   </div>
 </div>
@@ -357,7 +357,7 @@ function wipeApp() {
     "Finish & Wipe\n\n" +
     "This will:\n" +
     "  • SAVE your reports to a folder on the Desktop\n" +
-    "  • DELETE SounRunner and all its working files from this machine\n" +
+    "  • DELETE SounRunner, its installers and setup files from this machine\n" +
     "  • Shut down the app\n\n" +
     "Make sure your scan is finished. Continue?"
   );

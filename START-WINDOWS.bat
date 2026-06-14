@@ -108,8 +108,8 @@ REM instead of pausing (and don't leave a "press any key" on a half-gone app).
 if exist "%TEMP%\_sr_wiped" (
     del /f /q "%TEMP%\_sr_wiped" >nul 2>&1
     echo.
-    echo  SounRunner has finished and is removing itself from this machine.
-    echo  Your reports were saved to a folder on the Desktop.
+    echo  SounRunner has finished and is removing itself and its setup files
+    echo  from this machine. Your reports were saved to a folder on the Desktop.
     timeout /t 4 /nobreak >nul
     exit
 )
