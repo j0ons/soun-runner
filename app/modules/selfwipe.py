@@ -205,11 +205,18 @@ def _schedule_delete(targets: list[Path]) -> None:
     if sys.platform == "win32":
         import tempfile
         bat = Path(tempfile.gettempdir()) / f"_sr_wipe_{pid}.bat"
-        # The running image for a source run is python.exe (or pythonw.exe);
-        # filter on it so the PID digits can't match elsewhere in tasklist output.
-        img = Path(sys.executable).name or "python.exe"
-        # Per-target delete block: rmdir /s /q with bounded retries (the OS may
-        # hold a dir for a moment after we exit). Bounded loops never spin forever.
+        # IMPORTANT — why no tasklist/findstr PID-wait here:
+        # A detached batch has NO console, and `tasklist | findstr` blocks/misbehaves
+        # without one (it leaves a visible, stuck "findstr" window). `timeout` also
+        # fails when stdin is redirected ("input redirection is not supported"). The
+        # app already self-exits ~1.5s after answering the wipe request, so the
+        # cleaner doesn't need to watch the PID at all — it just waits a few seconds
+        # (via ping, the only redirect-safe sleep on Windows), then deletes with
+        # bounded retries. Simple and reliable beats clever-and-stuck.
+        def _ping_sleep(sec: int) -> str:
+            # ping 127.0.0.1 N+1 times ~= N seconds; works with no console/stdin.
+            return f"ping -n {sec + 1} 127.0.0.1 >NUL 2>&1"
+
         del_blocks = []
         for idx, tp in enumerate(paths):
             del_blocks.append(
@@ -218,32 +225,30 @@ def _schedule_delete(targets: list[Path]) -> None:
                 f'rmdir /s /q "{tp}" >NUL 2>&1\n'
                 f'if not exist "{tp}" goto next{idx}\n'
                 f"set /a d{idx}+=1\n"
-                f"if %d{idx}% GEQ 20 goto next{idx}\n"
-                f"timeout /t 1 /nobreak >NUL\n"
+                f"if %d{idx}% GEQ 15 goto next{idx}\n"
+                f"{_ping_sleep(1)}\n"
                 f"goto del{idx}\n"
                 f":next{idx}"
             )
         del_section = "\n".join(del_blocks)
+        # Give the app a head start to fully exit and release its file locks, then
+        # delete. No PID polling, no findstr, no timeout — nothing that can hang.
         script = f"""@echo off
-set /a tries=0
-:waitloop
-tasklist /FI "PID eq {pid}" /FI "IMAGENAME eq {img}" /NH 2>NUL | findstr /I "{img}" >NUL
-if errorlevel 1 goto delloop
-set /a tries+=1
-if %tries% GEQ 30 goto delloop
-timeout /t 1 /nobreak >NUL
-goto waitloop
-:delloop
+{_ping_sleep(4)}
 {del_section}
 del /f /q "%~f0" >NUL 2>&1
 """
         bat.write_text(script, encoding="utf-8")
-        DETACHED = 0x00000008          # DETACHED_PROCESS
+        # CREATE_NO_WINDOW alone (no DETACHED_PROCESS): DETACHED strips the console
+        # entirely, which is what made tasklist/findstr/timeout misbehave above.
+        # CREATE_NO_WINDOW gives the child its own hidden console so console tools
+        # work, while still showing no window to the operator.
         CREATE_NO_WINDOW = 0x08000000
+        CREATE_NEW_PROCESS_GROUP = 0x00000200
         subprocess.Popen(
             ["cmd", "/c", str(bat)],
             cwd=str(bat.parent),       # NOT inside any dir we're about to delete
-            creationflags=DETACHED | CREATE_NO_WINDOW,
+            creationflags=CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             close_fds=True,
         )
