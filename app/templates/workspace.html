@@ -405,8 +405,13 @@ function openFix(key) {
               + ' is not installed on this machine. Run: pip install '
               + (isWin ? 'pywinrm' : 'paramiko') + '  (or run the fix locally / on the host).</div>';
       }
-      html += '    <div class="cred-row"><label>Host</label><input id="cTarget" type="text" value="' + esc(fx.host || '') + '" placeholder="host or IP"></div>';
-      html += '    <div class="cred-row"><label>Username</label><input id="cUser" type="text" autocomplete="off" placeholder="' + (isWin ? 'Administrator' : 'root') + '"></div>';
+      const connectHost = fx.connect_host || fx.host || '';
+      const defUser = fx.default_user || (isWin ? 'Administrator' : 'root');
+      html += '    <div class="cred-row"><label>Host</label><input id="cTarget" type="text" value="' + esc(connectHost) + '" placeholder="host or IP"></div>';
+      // Username is PREFILLED with the platform default (a real value, not just a
+      // hint) so a blank field doesn't block the run — edit it if the box uses a
+      // different admin account.
+      html += '    <div class="cred-row"><label>Username</label><input id="cUser" type="text" autocomplete="off" value="' + esc(defUser) + '"></div>';
       html += '    <div class="cred-row"><label>Password</label><input id="cPass" type="password" autocomplete="new-password" placeholder="password"></div>';
       if (!isWin) {
         html += '    <div class="cred-row"><label>SSH key</label><textarea id="cKey" rows="3" placeholder="(optional) paste private key — leave blank to use the password"></textarea></div>';
@@ -454,7 +459,12 @@ function runFix(ek, isWin) {
     body.password = (document.getElementById('cPass') || {}).value || '';
     const keyEl = document.getElementById('cKey');
     if (keyEl) body.key_text = keyEl.value || '';
-    if (!body.username) { alert('Enter a username for the remote host.'); return; }
+    if (!body.target) { alert('Enter the host or IP of the remote machine.'); return; }
+    // Username is prefilled with a default and the server falls back too, so we
+    // only nudge if it's blank AND there's no key to carry the login.
+    if (!body.username && !body.key_text) {
+      if (!confirm('No username entered. Try the default admin account for this host?')) return;
+    }
   } else {
     if (!confirm('Run this fix on THIS machine now? It changes the local system (a rollback script is available).')) return;
   }

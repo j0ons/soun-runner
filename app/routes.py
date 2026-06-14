@@ -255,6 +255,18 @@ def _job_findings(job):
     return list(getattr(rd, "findings", [])) if rd is not None else []
 
 
+def _connect_host(host: str) -> str:
+    """Extract a bare connect target from a finding host that may read
+    "HOSTNAME (10.0.0.5)" — return the IP in the parentheses, else the value
+    as-is (stripped). Prevents trying to SSH/WinRM to "HOSTNAME (ip)"."""
+    h = (host or "").strip()
+    if "(" in h and h.endswith(")"):
+        inner = h[h.rfind("(") + 1:-1].strip()
+        if inner:
+            return inner
+    return h
+
+
 def _find_fix(job, key):
     """Generate the FixScript for the finding matching `key`, or None."""
     from app.modules.workspace import finding_key
@@ -292,6 +304,10 @@ def fix_list(job_id: str):
             "location": fx.location, "run_hint": fx.run_hint,
             # execution metadata for the "Run the fix" UI
             "runnable": is_runnable(fx),
+            # bare host to actually connect to (fx.host may read "NAME (ip)")
+            "connect_host": _connect_host(fx.host),
+            # sensible default remote login for the platform
+            "default_user": "Administrator" if fx.platform == "windows" else "root",
         })
     return jsonify({"fixes": out, "count": len(out), "remote": remote_available()})
 
@@ -339,8 +355,13 @@ def fix_run(job_id: str, key: str):
 
     data = request.get_json(silent=True) or {}
     mode = (data.get("mode") or "").strip()
-    target = (data.get("target") or fx.host or "").strip()
+    # Normalise the target so "NAME (ip)" can never reach the transport.
+    target = _connect_host(data.get("target") or fx.host or "")
     username = (data.get("username") or "").strip()
+    # Fall back to the platform default login if the operator left it blank
+    # (and isn't using a key) — Administrator for Windows, root for Linux.
+    if not username and not (data.get("key_text") or "").strip():
+        username = "Administrator" if fx.platform == "windows" else "root"
     password = data.get("password") or ""        # not stripped — passwords may have edge whitespace
     key_text = data.get("key_text") or ""
 
