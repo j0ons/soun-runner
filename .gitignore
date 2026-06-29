@@ -26,6 +26,10 @@ Thumbs.db
 # Internal session notes / sales plan — never commit
 sessionlog.md
 
+# Machine-local settings (SMTP password, etc.) — never commit. Persists across
+# `git pull`. Copy config.local.example to config.local and fill it in.
+config.local
+
 # PyInstaller build artifacts
 build/
 dist/

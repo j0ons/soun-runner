@@ -10,14 +10,9 @@ cd "$(dirname "$0")"
 # Advanced console password (CHANGE THIS for your deployment)
 export SOUN_ADVANCED_PASSWORD="Tmppassword"
 
-# Email reports to Soun ("✉ Email to Soun" button).
-# cPanel mailbox reports@sounalhosn.ae — SSL on port 465.
-# >>> Paste the mailbox password between the quotes on the PASSWORD line. <<<
-export SOUN_SMTP_HOST="sounalhosn.ae"
-export SOUN_SMTP_PORT="465"
-export SOUN_SMTP_USER="reports@sounalhosn.ae"
-export SOUN_SMTP_PASSWORD=""
-export SOUN_REPORT_TO="Mohamed@sounalhosn.ae"
+# Email settings (SMTP for the "Email to Soun" button + auto-send) live in
+# config.local — copy config.local.example to config.local once and fill it in.
+# That file is git-ignored, so the password persists across `git pull`.
 
 echo ""
 echo " ==============================================="

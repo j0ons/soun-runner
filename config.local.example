@@ -1,0 +1,23 @@
+# Soun Runner — machine-local settings TEMPLATE.
+#
+# Copy this file to `config.local` (same folder) and fill in the values.
+# `config.local` is git-ignored, so the password is NEVER committed and is NOT
+# overwritten when you `git pull`. You set it ONCE per machine.
+#
+#   macOS/Linux:  cp config.local.example config.local
+#   Windows:      copy config.local.example config.local
+#
+# Format: KEY=value, one per line. '#' lines and blanks are ignored. Quotes are
+# optional. A value set in the environment (launcher export/set) overrides this.
+
+# ── Email reports to Soun ─────────────────────────────────────────────────────
+# cPanel mailbox example (Secure SSL/TLS, port 465):
+SOUN_SMTP_HOST=sounalhosn.ae
+SOUN_SMTP_PORT=465
+SOUN_SMTP_USER=reports@sounalhosn.ae
+SOUN_SMTP_PASSWORD=your-mailbox-password-here
+SOUN_REPORT_TO=Mohamed@sounalhosn.ae
+# SOUN_SMTP_FROM=reports@sounalhosn.ae   # optional, defaults to SOUN_SMTP_USER
+
+# ── Advanced console password (optional) ──────────────────────────────────────
+# SOUN_ADVANCED_PASSWORD=Tmppassword

@@ -2,12 +2,46 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 from flask import Flask
 
 _LOGO_URI_CACHE: str | None = None
+
+
+def _config_dir() -> Path:
+    """Where config.local lives — next to the .exe when frozen, else the
+    project root. Matches how reports/ is anchored so the file persists."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+def load_local_config() -> None:
+    """Load KEY=value lines from `config.local` into the environment so settings
+    (like the SMTP password) persist on a machine WITHOUT being committed to git.
+
+    - git-ignored, so `git pull` never overwrites or exposes it.
+    - existing environment variables WIN (a launcher `export`/`set` overrides the
+      file), so per-deployment overrides still work.
+    - blank lines and `#` comments are ignored; values may be quoted.
+    """
+    path = _config_dir() / "config.local"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError):
+        return
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key = key.strip()
+        val = val.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = val
 
 
 def resource_path(*parts: str) -> Path:
@@ -42,6 +76,10 @@ def _logo_data_uri() -> str:
 
 
 def create_app() -> Flask:
+    # Pull machine-local settings (e.g. SMTP password) from config.local before
+    # anything reads the environment. Git-ignored, so it survives `git pull`.
+    load_local_config()
+
     app = Flask(
         __name__,
         template_folder=str(resource_path("templates")),

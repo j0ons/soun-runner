@@ -18,14 +18,10 @@ title Soun Runner - Soun Al Hosn Cybersecurity
 REM ---- Advanced console password (CHANGE THIS for your deployment) ----
 set SOUN_ADVANCED_PASSWORD=Tmppassword
 
-REM ---- Email reports to Soun ("Email to Soun" button) ----
-REM cPanel mailbox reports@sounalhosn.ae - SSL on port 465.
-REM >>> Put the mailbox password after PASSWORD= (no quotes). <<<
-set SOUN_SMTP_HOST=sounalhosn.ae
-set SOUN_SMTP_PORT=465
-set SOUN_SMTP_USER=reports@sounalhosn.ae
-set SOUN_SMTP_PASSWORD=
-set SOUN_REPORT_TO=Mohamed@sounalhosn.ae
+REM ---- Email reports to Soun ----
+REM SMTP settings (for the "Email to Soun" button + auto-send) live in
+REM config.local - copy config.local.example to config.local once and fill it
+REM in. That file is git-ignored, so the password persists across "git pull".
 
 echo.
 echo  ===============================================
