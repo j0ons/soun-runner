@@ -145,6 +145,33 @@ reports/
 
 You can also download them directly from the browser after a scan.
 
+### Email the reports to Soun (one click)
+
+After any finished scan, the action bar has an **✉ Email to Soun** button. It
+attaches the report PDF(s) — client + engineer for a free scan, or the single
+assessment PDF for an advanced scan — and emails them to
+**Mohamed@sounalhosn.ae**. This is the quick way to pull reports off a client
+machine you're AnyDesk'd into without copying files around.
+
+It only works once SMTP is configured. Set these before launching (edit
+`START-WINDOWS.bat` / `START-MAC.command`, lines are pre-written and commented):
+
+| Variable | Value | Notes |
+|----------|-------|-------|
+| `SOUN_SMTP_HOST` | `sounalhosn.ae` | cPanel outgoing server |
+| `SOUN_SMTP_PORT` | `465` | 465 = SSL (cPanel). 587 = STARTTLS if ever needed. |
+| `SOUN_SMTP_USER` | `reports@sounalhosn.ae` | the sending mailbox / login |
+| `SOUN_SMTP_PASSWORD` | *the mailbox password* | the cPanel email account's own password — **fill this in** |
+| `SOUN_SMTP_FROM` | `reports@sounalhosn.ae` | optional, defaults to the user |
+| `SOUN_REPORT_TO` | `Mohamed@sounalhosn.ae` | optional, this is the default |
+
+The host/port/user/recipient are already filled into `START-MAC.command` and
+`START-WINDOWS.bat` — you only need to add the mailbox password on the
+`SOUN_SMTP_PASSWORD` line.
+
+If it isn't configured, the button shows a clear message and you can still
+download the PDF and send it manually — nothing breaks.
+
 ---
 
 ## 7. Maintenance & troubleshooting

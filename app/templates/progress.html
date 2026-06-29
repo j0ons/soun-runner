@@ -208,6 +208,9 @@ body::after { content:''; position:fixed; inset:0; pointer-events:none;
       <a class="btn" href="/download/engineer/html/{{ job_id }}">HTML</a>
     </div>
     <div class="report-group">
+      <button class="btn" id="emailBtn" onclick="emailReports()">✉ Email to Soun</button>
+    </div>
+    <div class="report-group">
       <a class="btn" href="/free">+ New Scan</a>
     </div>
     {% else %}
@@ -221,6 +224,9 @@ body::after { content:''; position:fixed; inset:0; pointer-events:none;
       <a class="btn" href="/workspace/{{ job_id }}">Workspace</a>
       <a class="btn" href="/checklist/{{ job_id }}">Checklist</a>
       <a class="btn" href="/advanced">+ New Scan</a>
+    </div>
+    <div class="report-group">
+      <button class="btn" id="emailBtn" onclick="emailReports()">✉ Email to Soun</button>
     </div>
     {% endif %}
     <div class="report-group">
@@ -395,6 +401,33 @@ function wipeApp() {
         '<div><h2 style="color:#2dd47f;">Done.</h2>' +
         '<p>Reports saved to the Desktop. SounRunner has been removed.</p>' +
         '<p style="color:#8aa;">You can close this window.</p></div></div>';
+    });
+}
+
+function emailReports() {
+  const btn = document.getElementById('emailBtn');
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+
+  fetch('/email/' + jobId, { method: 'POST' })
+    .then(r => r.json().then(data => ({ ok: r.ok, data })))
+    .then(({ ok, data }) => {
+      btn.disabled = false;
+      if (ok && data.ok) {
+        btn.textContent = '✓ Emailed';
+        append(['[*] ' + data.message]);
+        setTimeout(() => { btn.textContent = original; }, 4000);
+      } else {
+        btn.textContent = original;
+        alert('Could not email the report.\n\n' + (data.message || 'Unknown error') +
+              '\n\nYou can still download the PDF and send it manually.');
+      }
+    })
+    .catch(() => {
+      btn.disabled = false;
+      btn.textContent = original;
+      alert('Could not reach the server to send the email. Download the PDF and send it manually.');
     });
 }
 </script>

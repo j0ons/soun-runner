@@ -509,6 +509,9 @@ def _run_free_job(job_id: str, app) -> None:
         job["report_html"] = job.get("report_html_client")
         job["report_pdf"] = job.get("report_pdf_client")
 
+        # Auto-email both reports to Soun (if SMTP is configured)
+        _auto_email(job, log)
+
         log("")
         log("╚══ FREE SCAN COMPLETE ══╝")
         job["status"] = "done"
@@ -882,6 +885,170 @@ def download_html(job_id: str):
                      download_name=f"SounRunner-{_safe_name(job['client_name'])}.html")
 
 
+# ── Email the reports to Soun ─────────────────────────────────────────────────
+
+def _job_attachments(job) -> list[tuple[str, Path]]:
+    """Collect the report files to email for a job, PDF-first with HTML as a
+    fallback so a report still goes out even when PDF generation was skipped."""
+    out: list[tuple[str, Path]] = []
+
+    def add(label: str, pdf_key: str, html_key: str) -> None:
+        pdf = job.get(pdf_key)
+        if pdf and Path(pdf).exists():
+            out.append((label, Path(pdf)))
+            return
+        html = job.get(html_key)
+        if html and Path(html).exists():
+            out.append((f"{label} (HTML — PDF unavailable)", Path(html)))
+
+    if job.get("mode") == "free":
+        add("Client report", "report_pdf_client", "report_html_client")
+        add("Engineer report", "report_pdf_engineer", "report_html_engineer")
+    else:
+        add("Assessment report", "report_pdf", "report_html")
+    return out
+
+
+@bp.post("/email/<job_id>")
+def email_reports(job_id: str):
+    """Email a finished job's report(s) to the Soun inbox."""
+    job = _jobs.get(job_id)
+    if not job:
+        return jsonify({"ok": False, "message": "Job not found."}), 404
+    if job.get("status") != "done":
+        return jsonify({"ok": False, "message": "Report is not ready yet."}), 400
+
+    attachments = _job_attachments(job)
+    if not attachments:
+        return jsonify({"ok": False, "message": "No report files found to send."}), 404
+
+    result = _send_job_email(job)
+    return jsonify(result), (200 if result.get("ok") else 502)
+
+
+def _send_job_email(job) -> dict:
+    """Build attachments + context and email the job's reports to Soun.
+    Shared by the manual button and the automatic post-scan send."""
+    attachments = _job_attachments(job)
+    if not attachments:
+        return {"ok": False, "message": "No report files found to send.", "attached": []}
+    from app.modules.emailer import send_reports
+    return send_reports(
+        client_name=job.get("client_name", ""),
+        target=job.get("target", ""),
+        mode=job.get("mode", "advanced"),
+        attachments=attachments,
+        details=_email_details(job),
+    )
+
+
+def _auto_email(job, log) -> None:
+    """Fire the report email automatically at the end of a scan. Never raises —
+    a delivery problem must not fail the scan; it just logs a line. Stays quiet
+    if SMTP isn't configured so unconfigured machines don't show noise."""
+    try:
+        from app.modules.emailer import is_configured
+        if not is_configured():
+            return
+        result = _send_job_email(job)
+        if result.get("ok"):
+            log(f"    → Report emailed to Soun ({', '.join(result.get('attached', []))})")
+        else:
+            log(f"    Auto-email skipped: {result.get('message', 'unknown error')}")
+    except Exception as exc:
+        log(f"    Auto-email error: {exc}")
+
+
+def _email_details(job) -> dict:
+    """Assemble the full company / machine / run / findings context for the
+    email body. Uses the rich report_data when present (advanced), and falls
+    back to the job's own stats for a free scan. Empty fields are dropped by
+    the emailer, so partial context is fine."""
+    mode = job.get("mode", "advanced")
+    stats = job.get("stats", {})
+    rd = job.get("report_data")
+
+    PROFILE_LABEL = {"quick": "Quick", "standard": "Standard", "thorough": "Thorough"}
+    profile = job.get("profile", "")
+
+    # ── Engagement / company facts ───────────────────────────────────────────
+    engagement = [
+        ("Client", job.get("client_name", "")),
+        ("Company", job.get("client_name", "")),
+        ("Domain", job.get("domain", "")),
+        ("Scan type", "Free quick scan" if mode == "free" else "Advanced assessment"),
+    ]
+
+    # ── The scan run + the machine it ran on ─────────────────────────────────
+    # Capture the operator machine's identity live (hostname / local IP), plus
+    # whatever network context the assessment already detected.
+    from app.modules.netinfo import detect
+    try:
+        net = detect()
+    except Exception:
+        net = None
+    ni = getattr(rd, "netinfo", None) or net
+
+    run = [
+        ("Target / scope", job.get("target", "")),
+        ("Scan profile", PROFILE_LABEL.get(profile, profile or "")),
+        ("Generated", getattr(rd, "generated_at", "")),
+        ("Operator", getattr(rd, "operator", "Soun Al Hosn")),
+        ("Run from host", getattr(ni, "hostname", "") if ni else ""),
+        ("Run from IP", getattr(ni, "local_ip", "") if ni else ""),
+        ("Hosts discovered", stats.get("hosts", 0)),
+        ("Open services", stats.get("ports", 0)),
+    ]
+
+    # ── Client-side network context (their perimeter, ISP, location) ─────────
+    network = []
+    if ni is not None:
+        network = [
+            ("Public IP", getattr(ni, "public_ip", "")),
+            ("ISP", getattr(ni, "isp", "")),
+            ("Organisation", getattr(ni, "org", "")),
+            ("ASN", getattr(ni, "asn", "")),
+            ("Gateway", getattr(ni, "gateway", "")),
+            ("Location", ", ".join(p for p in (getattr(ni, "city", ""),
+                                               getattr(ni, "country", "")) if p)),
+        ]
+
+    # ── Findings breakdown ───────────────────────────────────────────────────
+    if rd is not None:
+        findings = [
+            ("Risk score", f"{rd.risk_score}/100 ({rd.overall_risk_label})"),
+            ("Total findings", rd.total_findings),
+            ("Critical", rd.critical_count),
+            ("High", rd.high_count),
+            ("Medium", rd.medium_count),
+            ("Low", rd.low_count),
+        ]
+        hosts = []
+        for h in getattr(rd, "host_rows", [])[:40]:
+            ports = h.ports or "—"
+            hosts.append(f"{h.display or h.ip} [{h.device_type}] — {h.risk_label} — ports: {ports}")
+    else:
+        findings = [
+            ("Total findings", stats.get("findings", 0)),
+            ("Critical", stats.get("critical", 0)),
+        ]
+        hosts = []
+
+    return {
+        "company": job.get("client_name", ""),
+        "domain": job.get("domain", ""),
+        "mode_label": "Free scan" if mode == "free" else "Assessment",
+        "generated_at": getattr(rd, "generated_at", ""),
+        "operator": getattr(rd, "operator", "Soun Al Hosn"),
+        "job_id": next((jid for jid, j in _jobs.items() if j is job), ""),
+        "engagement": engagement,
+        "run": run,
+        "network": network,
+        "findings": findings,
+        "hosts": hosts,
+    }
+
+
 # ── Background job — the full streaming pipeline ──────────────────────────────
 
 def _run_job(job_id: str, app) -> None:
@@ -1112,6 +1279,9 @@ def _run_job(job_id: str, app) -> None:
         else:
             job["pdf_error"] = last_error()
             log(f"    PDF skipped: {last_error()}")
+
+        # ── 8. Auto-email the report to Soun (if SMTP is configured) ──────────
+        _auto_email(job, log)
 
         log("")
         log("╚══ ASSESSMENT COMPLETE ══╝")
