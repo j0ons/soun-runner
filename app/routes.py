@@ -632,6 +632,9 @@ def _rebuild_with_engineer(job_id: str, app) -> None:
         job["stats"]["findings"] = cached.total_findings
         job["stats"]["critical"] = cached.critical_count
         job["log"].append(f"{_ts()}  [*] Report updated with field assessment.")
+        # Re-send the UPDATED report so Soun gets the final version that includes
+        # the engineer's field findings (not the pre-checklist one).
+        _auto_email(job, lambda m: job["log"].append(f"{_ts()} {m}"))
         job["status"] = "done"
     except Exception as exc:
         job["error"] = str(exc)

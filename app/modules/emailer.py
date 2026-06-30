@@ -5,19 +5,21 @@ generated reports back to the office in one click. The reports otherwise just
 sit in the local ``reports/`` folder; this attaches them to an email and sends
 them to the Soun inbox.
 
-Stdlib only (``smtplib`` + ``email``) — no extra dependency. Configure via
-environment variables (set them in START-WINDOWS.bat / START-MAC.command):
+Stdlib only (``smtplib`` + ``email``) — no extra dependency.
 
-    SOUN_SMTP_HOST       e.g. smtp.gmail.com            (required)
-    SOUN_SMTP_PORT       587 (STARTTLS) or 465 (SSL)    default 587
-    SOUN_SMTP_USER       the sending mailbox / login     (required)
-    SOUN_SMTP_PASSWORD   app password for that mailbox   (required)
-    SOUN_SMTP_FROM       From address    default = SOUN_SMTP_USER
-    SOUN_REPORT_TO       recipient       default Mohamed@sounalhosn.ae
+Settings ship baked into the app (obfuscated, see ``_DEFAULTS`` below) so the
+feature works on a fresh client machine with NO setup. Any of these can be
+OVERRIDDEN per machine via the environment or ``config.local``:
 
-If the SMTP settings are missing, send() returns a clear, actionable error
-instead of raising — the UI shows it and the engineer can still download the
-PDFs manually.
+    SOUN_SMTP_HOST       SMTP server          (default: baked-in cPanel host)
+    SOUN_SMTP_PORT       465 (SSL) / 587 (STARTTLS)   (default: 465)
+    SOUN_SMTP_USER       the sending mailbox / login  (default: baked-in)
+    SOUN_SMTP_PASSWORD   the mailbox password          (default: baked-in)
+    SOUN_SMTP_FROM       From address          (default: = SOUN_SMTP_USER)
+    SOUN_REPORT_TO       recipient             (default: Mohamed@sounalhosn.ae)
+
+If a send fails, send_reports() returns a clear, actionable error dict instead
+of raising — the UI shows it and the engineer can still download the PDFs.
 """
 
 from __future__ import annotations
@@ -269,9 +271,9 @@ def send_reports(
     except smtplib.SMTPAuthenticationError:
         return {
             "ok": False,
-            "message": "SMTP login was rejected. Check SOUN_SMTP_USER / "
-                       "SOUN_SMTP_PASSWORD (Gmail needs an App Password, not "
-                       "your normal password).",
+            "message": "SMTP login was rejected. The reports@ mailbox password "
+                       "may have been changed/rotated — update the baked-in "
+                       "default (or SOUN_SMTP_PASSWORD / config.local).",
             "attached": [],
         }
     except (OSError, smtplib.SMTPException) as exc:
