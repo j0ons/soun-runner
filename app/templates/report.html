@@ -1068,7 +1068,7 @@ table.data-table tbody tr:hover td { background: rgba(14,165,233,0.03); }
         {% endif %}
         {% if f.has_cves %}
         <div class="cve-list">
-          <div class="cve-list-hdr">Known CVEs — NIST National Vulnerability Database</div>
+          <div class="cve-list-hdr">Potential CVEs for this product (NIST NVD) — confirm against the exact running version before relying on these</div>
           {% for cve in f.cves %}
           <div class="cve-row">
             <span class="cve-id"><a href="{{ cve.url }}" target="_blank">{{ cve.cve_id }}</a></span>
@@ -1448,7 +1448,7 @@ table.data-table tbody tr:hover td { background: rgba(14,165,233,0.03); }
   This is a point-in-time assessment — the security posture of the network may change at any time.
   Findings should be validated by a qualified security engineer before remediation work begins.
   This report is confidential and intended solely for the named recipient.
-  &nbsp;·&nbsp; © {{ r.generated_at.split(',')[0].split(' ')[-1] }} Soun Al Hosn Cybersecurity LLC · Dubai, UAE · TRN: sounalhosn.ae
+  &nbsp;·&nbsp; © Soun Al Hosn Cybersecurity LLC · Dubai, UAE · info@sounalhosn.ae · +971 52 203 4204
 </div>
 
 <script>

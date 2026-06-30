@@ -64,10 +64,16 @@ def _test_http_basic(url: str, user: str, pw: str, timeout: int = 6) -> bool:
     })
     try:
         resp = opener.open(req, timeout=timeout)
-        # 200 with auth header present where 401 was expected = accepted
+        # Accepted ONLY on a genuine success where a 401 was expected. A 3xx that
+        # urllib followed to a 200 also lands here. Anything else is NOT proof of
+        # valid credentials.
         return resp.status == 200
     except urllib.error.HTTPError as e:
-        return e.code not in (401, 403)
+        # 401/403 = rejected (expected). A 3xx to a login page, or a 4xx/5xx
+        # (404 wrong path, 500 server error) is NOT "credentials accepted" —
+        # treating those as success produced false CRITICAL findings. Only a
+        # 200/redirect-to-success counts, and those don't raise HTTPError.
+        return False
     except Exception:
         return False
 
@@ -127,7 +133,7 @@ def run_cred_tests(
             continue
         needs_auth = any("401" in str(f.get("detail", "")) or "authentication" in f.get("title", "").lower()
                          for f in wf.findings)
-        results = test_web_panel(wf.host, wf.port, requires_auth=needs_auth or True, log=log)
+        results = test_web_panel(wf.host, wf.port, requires_auth=needs_auth, log=log)
         all_findings.extend(results)
     if not all_findings:
         emit("[cred] No default credentials accepted (good).")
